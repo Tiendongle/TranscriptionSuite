@@ -49,7 +49,6 @@ def _looks_like_whispercpp(name: str) -> bool:
     basename = parts[-1] if parts else normalised
     return bool(_WHISPERCPP_BASENAME_RE.match(basename))
 
-
 def detect_backend_type(model_name: str) -> str:
     """Return backend type based on the model name."""
     name = model_name.strip()

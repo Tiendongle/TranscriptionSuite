@@ -469,6 +469,33 @@ class ModelManager:
         self._qwen_feature_reason = "not_requested"
         self._qwen_feature_error = None
 
+    def _initialize_qwen_feature_status(self) -> None:
+        """Initialize Qwen ASR feature availability from bootstrap state."""
+        status_file = os.environ.get("BOOTSTRAP_STATUS_FILE", "/runtime/bootstrap-status.json")
+        try:
+            import json
+            from pathlib import Path
+
+            path = Path(status_file)
+            if path.exists():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                qwen = payload.get("features", {}).get("qwen", {})
+                self._qwen_feature_available = bool(qwen.get("available", False))
+                self._qwen_feature_reason = str(qwen.get("reason", "not_requested") or "not_requested")
+                self._qwen_feature_error = qwen.get("error")
+                logger.info(
+                    "Loaded Qwen feature status from bootstrap: "
+                    f"available={self._qwen_feature_available}, reason={self._qwen_feature_reason}"
+                )
+                return
+        except Exception as e:
+            logger.debug(f"Could not load Qwen feature status from bootstrap: {e}")
+
+        # Fallback if no status file exists
+        self._qwen_feature_available = False
+        self._qwen_feature_reason = "not_requested"
+        self._qwen_feature_error = None
+
     def get_whispercpp_feature_status(self) -> dict[str, Any]:
         """Return whisper.cpp sidecar feature status."""
         return {
