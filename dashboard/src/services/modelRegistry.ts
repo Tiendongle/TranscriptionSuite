@@ -13,6 +13,7 @@ import {
   isWhisperCppModel,
   isMLXModel,
   isMLXParakeetModel,
+  isQwenModel,
 } from './modelCapabilities';
 
 export type ModelFamily =
@@ -23,6 +24,7 @@ export type ModelFamily =
   | 'mlx'
   | 'diarization'
   | 'custom'
+  | 'qwen'
   | 'none';
 export type ModelRole = 'main' | 'live' | 'diarization';
 
@@ -522,6 +524,52 @@ export const MODEL_REGISTRY: ModelInfo[] = [
     roles: ['main'],
   },
 
+  // ── Qwen3 ────────────────────────────────────────────────────────────────
+  {
+    id: 'Qwen/Qwen3-ASR-0.6B',
+    displayName: 'Qwen3 ASR 0.6B',
+    family: 'qwen',
+    description: 'Qwen3 automatic speech recognition model (0.6B parameters). Fast and accurate.',
+    parameterCount: '0.6B',
+    huggingfaceUrl: 'https://huggingface.co/Qwen/Qwen3-ASR-0.6B',
+    capabilities: { translation: true, liveMode: true, diarization: true, languageCount: 30 },
+    roles: ['main', 'live'],
+    requiresRuntime: 'cuda',
+  },
+  {
+    id: 'Qwen/Qwen3-ASR-1.7B',
+    displayName: 'Qwen3 ASR 1.7B',
+    family: 'qwen',
+    description: 'Qwen3 automatic speech recognition model (1.7B parameters). Very accurate.',
+    parameterCount: '1.7B',
+    huggingfaceUrl: 'https://huggingface.co/Qwen/Qwen3-ASR-1.7B',
+    capabilities: { translation: true, liveMode: true, diarization: true, languageCount: 30 },
+    roles: ['main', 'live'],
+    requiresRuntime: 'cuda',
+  },
+  {
+    id: 'Qwen/Qwen3-Omni-30B-A3B-Captioner',
+    displayName: 'Qwen3 Omni Captioner',
+    family: 'qwen',
+    description: 'Qwen3 Omni model optimized for highly descriptive captioning.',
+    parameterCount: '30B',
+    huggingfaceUrl: 'https://huggingface.co/Qwen/Qwen3-Omni-30B-A3B-Captioner',
+    capabilities: { translation: true, liveMode: true, diarization: true, languageCount: 30 },
+    roles: ['main', 'live'],
+    requiresRuntime: 'cuda',
+  },
+  {
+    id: 'Qwen/Qwen3.5-0.8B-Base',
+    displayName: 'Qwen 3.5 0.8B Base',
+    family: 'qwen',
+    description: 'Qwen 3.5 generic base model for ASR.',
+    parameterCount: '0.8B',
+    huggingfaceUrl: 'https://huggingface.co/Qwen/Qwen3.5-0.8B-Base',
+    capabilities: { translation: true, liveMode: true, diarization: true, languageCount: 30 },
+    roles: ['main', 'live'],
+    requiresRuntime: 'cuda',
+  },
+
   // ── Diarization ──────────────────────────────────────────────────────────
   {
     id: 'pyannote/speaker-diarization-community-1',
@@ -555,5 +603,6 @@ export function detectModelFamily(modelId: string): ModelFamily {
   if (isMLXParakeetModel(modelId) || isMLXModel(modelId)) return 'mlx';
   if (isVibeVoiceASRModel(modelId)) return 'vibevoice';
   if (isWhisperCppModel(modelId)) return 'whispercpp';
+  if (isQwenModel(modelId)) return 'qwen';
   return 'whisper';
 }

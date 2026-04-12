@@ -47,7 +47,7 @@ def is_live_mode_model_supported(model_name: str) -> bool:
     name = (model_name or "").strip()
     if not name or name == "__none__":
         return False
-    return detect_backend_type(name) == "whisper"
+    return detect_backend_type(name) in ("whisper", "qwen")
 
 
 class LiveModeSession:
@@ -159,6 +159,7 @@ class LiveModeSession:
             config = LiveModeConfig()
             config.model = resolve_live_transcriber_model(server_cfg)
             if config_data:
+                logger.warning(f"Live Mode: Received config_data from client: {config_data}")
                 if "model" in config_data:
                     candidate_model = str(config_data["model"] or "").strip()
                     if candidate_model:
@@ -206,7 +207,7 @@ class LiveModeSession:
                     "error",
                     {
                         "message": (
-                            "Live Mode only supports faster-whisper models "
+                            "Live Mode only supports faster-whisper and Qwen models "
                             "(RealtimeSTT path) in v1. "
                             f"Selected backend '{backend_type}' is not supported."
                         )
@@ -215,6 +216,7 @@ class LiveModeSession:
                 return False
 
             if config.translation_enabled:
+                logger.warning(f"Live Mode: Translation ENABLED for model '{config.model}'")
                 from server.core.stt.capabilities import supports_english_translation
 
                 if config.translation_target_language != "en":

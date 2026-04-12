@@ -60,6 +60,7 @@ _VIBEVOICE_ASR_QUANT_RUNTIME_PACKAGE_SPECS: tuple[str, ...] = (
     "accelerate>=0.26.0",
     "bitsandbytes>=0.43.1",
 )
+_QWEN_MODEL_PATTERN = re.compile(r"(?:^|/|models--)Qwen[/-]", re.IGNORECASE)
 
 # Load startup event writer (stdlib-only module, safe to import before deps).
 # Falls back to no-ops when running outside the container (e.g. tests).
@@ -139,12 +140,25 @@ def is_nemo_model_name(model_name: str | None) -> bool:
     return name.startswith("nvidia/parakeet") or name.startswith("nvidia/canary")
 
 
+def is_qwen_model_name(model_name: str | None) -> bool:
+    """Return True when *model_name* belongs to the Qwen ASR family."""
+    name = normalize_selected_model_name(model_name)
+    if not name:
+        return False
+    return bool(_QWEN_MODEL_PATTERN.search(name))
+
+
 def is_whisper_model_name(model_name: str | None) -> bool:
     """Return True when *model_name* belongs to the faster-whisper family."""
     name = normalize_selected_model_name(model_name)
     if not name:
         return False
-    return not is_nemo_model_name(name) and not is_vibevoice_asr_model_name(name)
+    # Whisper is the fallback when it's not a specialty model family.
+    return (
+        not is_nemo_model_name(name)
+        and not is_qwen_model_name(name)
+        and not is_vibevoice_asr_model_name(name)
+    )
 
 
 _NVIDIA_PROC_VERSION = Path("/proc/driver/nvidia/version")
@@ -338,7 +352,6 @@ def run_dependency_sync(
     cmd = [
         "uv",
         "sync",
-        "--frozen",
         "--no-dev",
         "--project",
         str(PROJECT_DIR),
@@ -982,20 +995,16 @@ except Exception as exc:
             timeout=max(30, min(timeout_seconds, 300)),
             check=False,
         )
+        output = (result.stdout or "").strip().splitlines()
+        if not output:
+            return {"available": False, "reason": "import_failed"}
+        payload = json.loads(output[-1])
     except Exception as exc:
         return {
             "available": False,
             "reason": "import_failed",
             "error": f"{type(exc).__name__}: {exc}",
         }
-
-    output = (result.stdout or "").strip().splitlines()
-    if not output:
-        return {"available": False, "reason": "import_failed"}
-    try:
-        payload = json.loads(output[-1])
-    except json.JSONDecodeError:
-        return {"available": False, "reason": "import_failed"}
 
     result_payload = {
         "available": bool(payload.get("available", False)),
@@ -1005,6 +1014,49 @@ except Exception as exc:
     if error:
         result_payload["error"] = str(error)
     return result_payload
+
+
+def check_qwen_import(
+    venv_python: Path,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Verify that whisperx with Qwen support is available."""
+    checker = """
+import importlib.util
+import json
+
+try:
+    spec = importlib.util.find_spec("whisperx")
+    if spec is None:
+        print(json.dumps({"available": False, "reason": "not_installed"}))
+    else:
+        import whisperx
+        # Check for Qwen-specific extensions in the fork
+        has_qwen = hasattr(whisperx, "load_qwen_model") and hasattr(whisperx, "align_qwen")
+        if has_qwen:
+            print(json.dumps({"available": True, "reason": "ready"}))
+        else:
+            # Fallback check for older/standard versions without explicit attributes
+            # but which might still work if the user just wants standard ASR.
+            # However, for 'qwen' backend specifically, we want the fork's features.
+            print(json.dumps({"available": False, "reason": "standard_whisperx_detected"}))
+except Exception as exc:
+    print(json.dumps({"available": False, "reason": "import_failed", "error": str(exc)}))
+"""
+    try:
+        result = subprocess.run(
+            [str(venv_python), "-c", checker],
+            text=True,
+            capture_output=True,
+            timeout=max(30, min(timeout_seconds, 300)),
+            check=False,
+        )
+        output = (result.stdout or "").strip().splitlines()
+        if not output:
+            return {"available": False, "reason": "import_failed"}
+        return json.loads(output[-1])
+    except Exception as exc:
+        return {"available": False, "reason": "import_failed", "error": str(exc)}
 
 
 def check_vibevoice_asr_import(
@@ -1221,13 +1273,25 @@ def main() -> int:
         )
         return 1
 
-    # Compute extras to include in uv sync based on env flags.
+    model_config_start = time.perf_counter()
+    main_model, live_model, diarization_model = load_config_models()
+    log_timing("model config load complete", model_config_start)
+    log(f"Configured main model: {main_model}")
+    log(f"Configured live model: {live_model}")
+    log(f"Configured diarization model: {diarization_model}")
+
+    # Compute extras to include in uv sync based on env flags and model selection.
     # This avoids separate `uv pip install` calls for optional packages.
     requested_extras: list[str] = []
     if parse_bool_env("INSTALL_WHISPER", False):
         requested_extras.append("whisper")
     if parse_bool_env("INSTALL_NEMO", False):
         requested_extras.append("nemo")
+
+    qwen_selected = is_qwen_model_name(main_model) or is_qwen_model_name(live_model)
+    if parse_bool_env("INSTALL_QWEN", False) or qwen_selected:
+        requested_extras.append("qwen")
+
     # vibevoice_asr uses env-overridable git+ URL, continues with uv pip install
     extras_tuple = tuple(sorted(requested_extras))
 
@@ -1290,13 +1354,6 @@ def main() -> int:
         )
         return 1
 
-    model_config_start = time.perf_counter()
-    main_model, live_model, diarization_model = load_config_models()
-    log_timing("model config load complete", model_config_start)
-    log(f"Configured main model: {main_model}")
-    log(f"Configured live model: {live_model}")
-    log(f"Configured diarization model: {diarization_model}")
-
     diarization_start = time.perf_counter()
     preload_cache_key = compute_diarization_preload_cache_key(
         diarization_model=diarization_model,
@@ -1352,6 +1409,7 @@ def main() -> int:
     vibevoice_selected = is_vibevoice_asr_model_name(main_model) or is_vibevoice_asr_model_name(
         live_model
     )
+    qwen_selected = is_qwen_model_name(main_model) or is_qwen_model_name(live_model)
 
     # ── Reuse cached feature status when deps are unchanged ───────────────
     _reuse_feature_cache = should_reuse_cached_feature_status(
@@ -1399,7 +1457,7 @@ def main() -> int:
                         str(venv_python),
                         "faster-whisper>=1.2.1",
                         "ctranslate2>=4.6.2",
-                        "whisperx>=3.1.0",
+                        "whisperx @ git+https://github.com/Ahelsamahy/whisperX.git@qwenasr-and-Forced-aligner",
                     ],
                     timeout_seconds=timeout_seconds,
                     env=build_uv_sync_env(
@@ -1445,6 +1503,44 @@ def main() -> int:
             "warn-whisper",
             "warning",
             f"faster-whisper unavailable \u2014 {reason}",
+            persistent=True,
+        )
+
+    # ── Qwen ASR support (via whisperx fork) ─────────────────────────────
+    qwen_start = time.perf_counter()
+    qwen_status: dict[str, Any]
+
+    if not qwen_selected:
+        # Since Qwen is part of the whisperx fork which is a primary dependency,
+        # we check it even if not currently selected to confirm environment readiness.
+        qwen_status = check_qwen_import(
+            venv_python=venv_python,
+            timeout_seconds=timeout_seconds,
+        )
+        if qwen_status.get("available"):
+            log("Qwen ASR support verified as ready")
+        else:
+            log(f"Qwen ASR support check: {qwen_status.get('reason', 'unavailable')}")
+    elif _reuse_feature_cache:
+        qwen_status = previous_status_payload["features"].get("qwen", {"available": False, "reason": "not_cached"})
+        log(f"Qwen feature check: reusing cached result (available={qwen_status.get('available')})")
+    else:
+        qwen_status = check_qwen_import(
+            venv_python=venv_python,
+            timeout_seconds=timeout_seconds,
+        )
+        if qwen_status.get("available"):
+            log("Qwen ASR support ready")
+        else:
+            log(f"Qwen ASR support unavailable: {qwen_status.get('reason', 'unavailable')}")
+
+    log_timing("Qwen feature check complete", qwen_start)
+    if qwen_selected and not qwen_status.get("available"):
+        reason = qwen_status.get("reason", "unavailable")
+        emit_event(
+            "warn-qwen",
+            "warning",
+            f"Qwen ASR unavailable \u2014 {reason}",
             persistent=True,
         )
 
@@ -1737,6 +1833,7 @@ def main() -> int:
                 "whisper": whisper_status,
                 "nemo": nemo_status,
                 "vibevoice_asr": vibevoice_asr_status,
+                "qwen": qwen_status,
             },
         },
     )

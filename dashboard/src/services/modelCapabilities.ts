@@ -12,6 +12,7 @@ const MLX_PARAKEET_PATTERN = /^mlx-community\/parakeet/i;
 // Matches community Canary MLX ports: eelcor/canary-1b-v2-mlx, Mediform/canary-1b-v2-mlx-q8, qfuxa/canary-mlx, etc.
 const MLX_CANARY_PATTERN = /^[^/]+\/canary[^/]*-mlx/i;
 const MLX_PATTERN = /^mlx-community\//i;
+const QWEN_PATTERN = /^Qwen\//i;
 
 /**
  * The 25 European languages supported by NeMo ASR models
@@ -127,6 +128,14 @@ export function isMLXCanaryModel(modelName: string | null | undefined): boolean 
 }
 
 /**
+ * Returns true if the model is a Qwen ASR model.
+ */
+export function isQwenModel(modelName: string | null | undefined): boolean {
+  const name = (modelName ?? '').trim();
+  return QWEN_PATTERN.test(name);
+}
+
+/**
  * Returns true if the model should run on the faster-whisper/Whisper backend.
  * Unknown or empty values are treated as Whisper-compatible defaults.
  */
@@ -135,7 +144,8 @@ export function isWhisperModel(modelName: string | null | undefined): boolean {
     !isNemoModel(modelName) &&
     !isVibeVoiceASRModel(modelName) &&
     !isWhisperCppModel(modelName) &&
-    !isMLXModel(modelName)
+    !isMLXModel(modelName) &&
+    !isQwenModel(modelName)
   );
 }
 
@@ -222,8 +232,27 @@ export function supportsTranslation(modelName: string | null | undefined): boole
   if (isMLXCanaryModel(modelName)) return false;
   // VibeVoice-ASR (v1 integration) is ASR+diarization only.
   if (isVibeVoiceASRModel(modelName)) return false;
+  if (isQwenModel(modelName)) return true;
   if (name.includes('turbo')) return false;
   if (name.endsWith('.en')) return false;
 
   return true;
+}
+
+/**
+ * Returns true if the model is compatible with the server's real-time/live mode.
+ * Real-time mode requires backends that support incremental audio processing.
+ */
+export function supportsLiveMode(modelName: string | null | undefined): boolean {
+  // whispercpp (sidecar) and vibevoice are not supported in Live Mode v1.
+  if (isWhisperCppModel(modelName)) return false;
+  if (isVibeVoiceASRModel(modelName)) return false;
+  
+  // WhisperX (all flavors, including Qwen) and NeMo models are supported.
+  return (
+    isWhisperModel(modelName) || 
+    isNemoModel(modelName) || 
+    isMLXModel(modelName) || 
+    isQwenModel(modelName)
+  );
 }

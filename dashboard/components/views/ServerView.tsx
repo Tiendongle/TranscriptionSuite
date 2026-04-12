@@ -40,7 +40,7 @@ import { useDockerContext } from '../../src/hooks/DockerContext';
 import { apiClient } from '../../src/api/client';
 import { writeToClipboard } from '../../src/hooks/useClipboard';
 import { formatDateDMY, compareVersionTags } from '../../src/services/versionUtils';
-import { isWhisperModel, isMLXModel } from '../../src/services/modelCapabilities';
+import { isWhisperModel, isMLXModel, supportsLiveMode } from '../../src/services/modelCapabilities';
 import { MODEL_REGISTRY, getModelsByFamily } from '../../src/services/modelRegistry';
 import {
   MODEL_DEFAULT_LOADING_PLACEHOLDER,
@@ -157,7 +157,7 @@ function findCaseInsensitivePreset(value: string, options: string[]): string | n
 
 function normalizeLiveModelToWhisper(modelName: string): string {
   if (modelName === DISABLED_MODEL_SENTINEL) return modelName;
-  return isWhisperModel(modelName) ? modelName : FALLBACK_LIVE_WHISPER_MODEL;
+  return supportsLiveMode(modelName) ? modelName : FALLBACK_LIVE_WHISPER_MODEL;
 }
 
 function mapMainModelToSelection(modelName: string): { selection: string; custom: string } {
@@ -428,7 +428,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
             resolvedMainModel,
             '',
           );
-          if (resolvedLiveModel !== DISABLED_MODEL_SENTINEL && !isWhisperModel(resolvedLiveModel)) {
+          if (resolvedLiveModel !== DISABLED_MODEL_SENTINEL && !supportsLiveMode(resolvedLiveModel)) {
             nextLiveSelection = FALLBACK_LIVE_WHISPER_MODEL;
             nextLiveCustom = '';
           }
@@ -772,8 +772,9 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
   );
   const normalizedLiveModel = normalizeLiveModelToWhisper(activeLiveModel);
   const liveModelWhisperOnlyCompatible =
-    activeLiveModel === DISABLED_MODEL_SENTINEL || isWhisperModel(activeLiveModel);
-  const liveModeModelConstraintMessage = 'Live Mode only supports faster-whisper models.';
+    activeLiveModel === DISABLED_MODEL_SENTINEL || supportsLiveMode(activeLiveModel);
+  const liveModeModelConstraintMessage =
+    'Live Mode only supports faster-whisper, Qwen, or NeMo models.';
 
   // Active diarization model name — empty string = Sortformer (server auto-select)
   const activeDiarizationModel =
@@ -917,7 +918,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     if (
       !localSelectionsHydrated ||
       activeLiveModel === DISABLED_MODEL_SENTINEL ||
-      isWhisperModel(activeLiveModel)
+      supportsLiveMode(activeLiveModel)
     )
       return;
     setLiveModelSelection(FALLBACK_LIVE_WHISPER_MODEL);

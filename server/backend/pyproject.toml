@@ -55,13 +55,16 @@ dependencies = [
 whisper = [
     "faster-whisper>=1.2.1",
     "ctranslate2>=4.7.1",
-    "whisperx>=3.8.1",       # WhisperX: faster-whisper + wav2vec2 alignment + diarization
+    "whisperx @ git+https://github.com/Ahelsamahy/whisperX.git@qwenasr-and-Forced-aligner",       # WhisperX: faster-whisper + wav2vec2 alignment + diarization
 ]
 nemo = [
     "nemo_toolkit[asr]>=2.7.0",
 ]
 vibevoice_asr = [
     "vibevoice @ git+https://github.com/microsoft/VibeVoice.git@1807b858d4f7dffdd286249a01616c243e488c9e",
+]
+qwen = [
+    "qwen-asr",
 ]
 mlx = [
     "parakeet-mlx>=0.2.0",
@@ -119,6 +122,10 @@ torchaudio = [{ index = "pytorch-cu129", marker = "sys_platform != 'darwin'" }]
 # macOS-only; the others target Linux/Windows CUDA.  They are never installed
 # in the same environment.
 [tool.uv]
+override-dependencies = [
+    "torch>=2.8.0",
+    "torchaudio>=2.8.0",
+]
 conflicts = [
     [
         { extra = "mlx" },
@@ -131,5 +138,9 @@ conflicts = [
     [
         { extra = "mlx" },
         { extra = "whisper" },
+    ],
+    [
+        { extra = "mlx" },
+        { extra = "qwen" },
     ],
 ]

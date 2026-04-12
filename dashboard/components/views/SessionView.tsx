@@ -47,6 +47,7 @@ import {
   filterLanguagesForModel,
   isCanaryModel,
   isWhisperModel,
+  supportsLiveMode,
   CANARY_TRANSLATION_TARGETS,
 } from '../../src/services/modelCapabilities';
 import { isModelDisabled } from '../../src/services/modelSelection';
@@ -311,16 +312,16 @@ export const SessionView: React.FC<SessionViewProps> = ({
   const canTranslateLive = supportsTranslation(activeLiveModel);
   const mainModelDisabled = isModelDisabled(activeModel);
   const liveModelDisabled = isModelDisabled(activeLiveModel);
-  const liveModeWhisperOnlyCompatible = !liveModelDisabled && isWhisperModel(activeLiveModel);
+  const liveModeWhisperOnlyCompatible = !liveModelDisabled && supportsLiveMode(activeLiveModel);
   const liveModeUnsupportedMessage = activeLiveModel
-    ? `Live Mode is not compatible with "${activeLiveModel}" — only faster-whisper models are supported in v1. Set a faster-whisper model as the Live Mode model in Server settings.`
-    : 'Live Mode only supports faster-whisper models in v1. Change the Live Mode model in Server settings.';
+    ? `Live Mode is not compatible with "${activeLiveModel}" — only faster-whisper, Qwen, or NeMo models are supported in v1. Set a compatible model as the Live Mode model in Server settings.`
+    : 'Live Mode only supports faster-whisper, Qwen, or NeMo models in v1. Change the Live Mode model in Server settings.';
   const liveModeDisabledReason = (() => {
     if (!clientRunning) return 'Server is not running';
     if (!serverConnection.ready) return 'Server is not ready';
     if (liveModelDisabled) return 'No live model selected — configure one in Server settings';
     if (!liveModeWhisperOnlyCompatible)
-      return `"${activeLiveModel}" is not a faster-whisper model — Live Mode requires a faster-whisper model`;
+      return `"${activeLiveModel}" is not a compatible model — Live Mode requires a faster-whisper, Qwen, or NeMo model`;
     return '';
   })();
 
@@ -1969,6 +1970,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
                             options={liveLanguageOptions}
                             accentColor="magenta"
                             className="focus:ring-accent-magenta h-full min-w-32.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-300 outline-none focus:ring-1"
+                            disabled={isLive}
                           />
                         </div>
                         <div className="mx-0.5 h-5 w-px shrink-0 bg-white/10"></div>
@@ -1990,13 +1992,14 @@ export const SessionView: React.FC<SessionViewProps> = ({
                               options={['Off', ...CANARY_TRANSLATION_TARGETS]}
                               accentColor="magenta"
                               className="focus:ring-accent-magenta h-full min-w-25 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-slate-300 outline-none focus:ring-1"
+                              disabled={isLive}
                             />
                           ) : (
                             <AppleSwitch
                               checked={liveTranslate && canTranslateLive}
                               onChange={setLiveTranslate}
                               size="sm"
-                              disabled={!canTranslateLive}
+                              disabled={!canTranslateLive || isLive}
                             />
                           )}
                         </div>
@@ -2147,6 +2150,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
                         options={liveLanguageOptions}
                         accentColor="magenta"
                         className="focus:ring-accent-magenta h-full min-w-32.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-300 outline-none focus:ring-1"
+                        disabled={isLive}
                       />
                     </div>
                     <div className="mx-0.5 h-5 w-px shrink-0 bg-white/10"></div>
@@ -2166,13 +2170,14 @@ export const SessionView: React.FC<SessionViewProps> = ({
                           options={['Off', ...CANARY_TRANSLATION_TARGETS]}
                           accentColor="magenta"
                           className="focus:ring-accent-magenta h-full min-w-25 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-slate-300 outline-none focus:ring-1"
+                          disabled={isLive}
                         />
                       ) : (
                         <AppleSwitch
                           checked={liveTranslate && canTranslateLive}
                           onChange={setLiveTranslate}
                           size="sm"
-                          disabled={!canTranslateLive}
+                          disabled={!canTranslateLive || isLive}
                         />
                       )}
                     </div>

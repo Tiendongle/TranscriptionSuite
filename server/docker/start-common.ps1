@@ -5,7 +5,11 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("local", "remote")]
-    [string]$Mode
+    [string]$Mode,
+
+    [string]$Tag,
+
+    [switch]$Build
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +18,14 @@ $ErrorActionPreference = "Stop"
 # Constants
 # ============================================================================
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DockerImage = "ghcr.io/homelab-00/transcriptionsuite-server:$($env:TAG)"
-if (-not $env:TAG) { throw 'TAG environment variable must be set' }
+
+# Tag resolution: 1. Param, 2. Env, 3. Default "latest"
+if ([string]::IsNullOrWhiteSpace($Tag)) {
+    $Tag = if (-not [string]::IsNullOrWhiteSpace($env:TAG)) { $env:TAG } else { "latest" }
+}
+$env:TAG = $Tag # Export for docker compose consistency
+
+$DockerImage = "ghcr.io/homelab-00/transcriptionsuite-server:$Tag"
 $ContainerName = "transcriptionsuite-container"
 $HfDiarizationTermsUrl = "https://huggingface.co/pyannote/speaker-diarization-community-1"
 $script:PromptTimeOffsetSeconds = 0
@@ -317,6 +327,40 @@ if (-not (Test-Path $ComposeFile)) {
     exit 1
 }
 
+$ComposeArgs = @("-f", $ComposeFile)
+
+# Desktop VM overlay (Windows/macOS) — handles port mapping and bridge networking.
+if ($IsWindows -or $IsMacOS -or $env:OS -match "Windows_NT") {
+    $DesktopOverlay = Join-Path $ScriptDir "docker-compose.desktop-vm.yml"
+    if (Test-Path $DesktopOverlay) {
+        Write-Info "Applying Desktop VM overlay (port mapping enabled)"
+        $ComposeArgs += "-f"
+        $ComposeArgs += $DesktopOverlay
+    }
+}
+
+# GPU overlay (NVIDIA) — handles GPU reservation.
+$HasNvidiaGpu = $false
+try {
+    $null = nvidia-smi --query-gpu=name --format=csv 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $HasNvidiaGpu = $true
+    }
+} catch {
+    $HasNvidiaGpu = $false
+}
+
+if ($HasNvidiaGpu) {
+    $GpuOverlay = Join-Path $ScriptDir "docker-compose.gpu.yml"
+    if (Test-Path $GpuOverlay) {
+        Write-Info "Applying NVIDIA GPU overlay"
+        $ComposeArgs += "-f"
+        $ComposeArgs += $GpuOverlay
+    } else {
+        Write-Info "NVIDIA GPU detected, but docker-compose.gpu.yml not found"
+    }
+}
+
 # ============================================================================
 # Resolve Config/.env
 # ============================================================================
@@ -465,6 +509,26 @@ if ($imageExists) {
 }
 
 # ============================================================================
+# Build Container (if requested)
+# ============================================================================
+if ($Build) {
+    Write-Status "Building TranscriptionSuite image (tag: $Tag)..."
+    $env:TAG = $Tag
+    
+    # GH-61: Temporarily set EAP to SilentlyContinue to prevent NativeCommandError 
+    # when docker compose outputs progress to stderr.
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    docker compose @ComposeArgs @EnvFileArg build
+    $ErrorActionPreference = $oldEAP
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMsg "Build failed"
+        exit $LASTEXITCODE
+    }
+}
+
+# ============================================================================
 # Start Container
 # ============================================================================
 if ($Mode -eq "remote") {
@@ -481,7 +545,13 @@ if ($Mode -eq "remote") {
 
 Set-Location $ScriptDir
 
-$composeOutput = docker compose @EnvFileArg up -d 2>&1
+# GH-61: Temporarily set EAP to SilentlyContinue to prevent NativeCommandError 
+# when docker compose outputs progress/status to stderr.
+$oldEAP = $ErrorActionPreference
+$ErrorActionPreference = "SilentlyContinue"
+$composeOutput = docker compose @ComposeArgs @EnvFileArg up -d 2>&1
+$ErrorActionPreference = $oldEAP
+
 if ($LASTEXITCODE -ne 0) {
     $composeOutput | Out-Host
     exit $LASTEXITCODE

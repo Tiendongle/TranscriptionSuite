@@ -1,0 +1,17 @@
+{
+  "name": "transcriptionsuite-root",
+  "private": true,
+  "version": "1.3.2",
+  "description": "TranscriptionSuite root configuration and unified lifecycle management.",
+  "scripts": {
+    "docker:build": "powershell -ExecutionPolicy Bypass -File server/docker/start-local.ps1 -Build",
+    "docker:dev": "powershell -ExecutionPolicy Bypass -File server/docker/start-local.ps1",
+    "docker:start": "powershell -ExecutionPolicy Bypass -File server/docker/start-remote.ps1",
+    "docker:stop": "powershell -ExecutionPolicy Bypass -File server/docker/stop.ps1",
+    "docker:clean": "powershell -Command \"$env:TAG='latest'; docker compose -f server/docker/docker-compose.yml down -v\"",
+    "env:check": "powershell -File server/docker/start-common.ps1 -Mode local -Tag latest"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}

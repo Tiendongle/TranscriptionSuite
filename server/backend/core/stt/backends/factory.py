@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from server.core.stt.backends.base import STTBackend
+
+logger = logging.getLogger(__name__)
 
 _PARAKEET_PATTERN = re.compile(r"^nvidia/(parakeet|nemotron-speech)", re.IGNORECASE)
 _CANARY_PATTERN = re.compile(r"^nvidia/canary", re.IGNORECASE)
@@ -24,6 +27,8 @@ _MLX_CANARY_PATTERN = re.compile(r"^[^/]+/canary[^/]*-mlx", re.IGNORECASE)
 # MLX VibeVoice must be checked before the generic VibeVoice pattern.
 _MLX_VIBEVOICE_PATTERN = re.compile(r"^mlx-community/vibevoice-asr", re.IGNORECASE)
 _MLX_PATTERN = re.compile(r"^mlx-community/", re.IGNORECASE)
+# Matches Qwen models
+_QWEN_PATTERN = re.compile(r"^Qwen/", re.IGNORECASE)
 
 
 def _looks_like_whispercpp(name: str) -> bool:
@@ -48,6 +53,9 @@ def _looks_like_whispercpp(name: str) -> bool:
 def detect_backend_type(model_name: str) -> str:
     """Return backend type based on the model name."""
     name = model_name.strip()
+    if _QWEN_PATTERN.match(name):
+        logger.info(f"STT Factory: QWEN model detected: {model_name}")
+        return "qwen"
     if _PARAKEET_PATTERN.match(name):
         return "parakeet"
     if _CANARY_PATTERN.match(name):
@@ -66,6 +74,10 @@ def detect_backend_type(model_name: str) -> str:
     if _MLX_PATTERN.match(name):
         return "mlx_whisper"
     return "whisper"
+
+def is_qwen_model(model_name: str) -> bool:
+    """Return True if *model_name* is a Qwen ASR model."""
+    return detect_backend_type(model_name) == "qwen"
 
 
 def is_parakeet_model(model_name: str) -> bool:
@@ -111,6 +123,8 @@ def is_mlx_parakeet_model(model_name: str) -> bool:
 def create_backend(model_name: str) -> STTBackend:
     """Instantiate the appropriate STTBackend for *model_name*."""
     backend_type = detect_backend_type(model_name)
+    logger.info(f"STT Factory: Creating backend '{backend_type}' for model '{model_name}'")
+
     if backend_type == "parakeet":
         from server.core.stt.backends.parakeet_backend import ParakeetBackend
 
@@ -120,6 +134,11 @@ def create_backend(model_name: str) -> STTBackend:
         from server.core.stt.backends.canary_backend import CanaryBackend
 
         return CanaryBackend()
+
+    if backend_type == "qwen":
+        from server.core.stt.backends.qwen_backend import QwenBackend
+
+        return QwenBackend()
 
     if backend_type == "vibevoice_asr":
         from server.core.stt.backends.vibevoice_asr_backend import VibeVoiceASRBackend

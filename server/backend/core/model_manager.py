@@ -239,6 +239,7 @@ class ModelManager:
         self._initialize_nemo_feature_status()
         self._initialize_vibevoice_asr_feature_status()
         self._initialize_whispercpp_feature_status()
+        self._initialize_qwen_feature_status()
 
         # Fix 3: Start background NeMo import if NeMo models will be used
         self._start_background_nemo_import()
@@ -441,6 +442,33 @@ class ModelManager:
                 "(set WHISPERCPP_SERVER_URL or whisper_cpp.server_url in config)"
             )
 
+    def _initialize_qwen_feature_status(self) -> None:
+        """Initialize Qwen ASR feature availability from bootstrap state."""
+        status_file = os.environ.get("BOOTSTRAP_STATUS_FILE", "/runtime/bootstrap-status.json")
+        try:
+            import json
+            from pathlib import Path
+
+            path = Path(status_file)
+            if path.exists():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                qwen = payload.get("features", {}).get("qwen", {})
+                self._qwen_feature_available = bool(qwen.get("available", False))
+                self._qwen_feature_reason = str(qwen.get("reason", "not_requested") or "not_requested")
+                self._qwen_feature_error = qwen.get("error")
+                logger.info(
+                    "Loaded Qwen feature status from bootstrap: "
+                    f"available={self._qwen_feature_available}, reason={self._qwen_feature_reason}"
+                )
+                return
+        except Exception as e:
+            logger.debug(f"Could not load Qwen feature status from bootstrap: {e}")
+
+        # Fallback if no status file exists
+        self._qwen_feature_available = False
+        self._qwen_feature_reason = "not_requested"
+        self._qwen_feature_error = None
+
     def get_whispercpp_feature_status(self) -> dict[str, Any]:
         """Return whisper.cpp sidecar feature status."""
         return {
@@ -525,6 +553,16 @@ class ModelManager:
             status["error"] = self._vibevoice_asr_feature_error
         return status
 
+    def get_qwen_feature_status(self) -> dict[str, Any]:
+        """Return Qwen ASR capability metadata for API clients."""
+        status: dict[str, Any] = {
+            "available": self._qwen_feature_available,
+            "reason": self._qwen_feature_reason,
+        }
+        if self._qwen_feature_error:
+            status["error"] = self._qwen_feature_error
+        return status
+
     def _get_mlx_feature_status(self) -> dict[str, Any]:
         """Check if MLX (Apple Silicon Metal) STT is available via mlx-audio."""
         import platform as _platform
@@ -582,6 +620,7 @@ class ModelManager:
                 "openai/whisper-",
                 "nvidia/",
                 "microsoft/",
+                "qwen/",
             ]:
                 if name.startswith(prefix):
                     name = name[len(prefix) :]
@@ -916,6 +955,7 @@ class ModelManager:
                 "vibevoice_asr": self.get_vibevoice_asr_feature_status(),
                 "whispercpp": self.get_whispercpp_feature_status(),
                 "mlx": self._get_mlx_feature_status(),
+                "qwen": self.get_qwen_feature_status(),
             },
         }
         return status

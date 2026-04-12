@@ -458,7 +458,8 @@ class AudioToTextRecorder:
 
             if use_background_warmup:
                 backend.warmup(background=True)
-            elif backend_name == "whisperx":
+            elif backend_name in ("whisperx", "qwen"):
+                # WhisperX and Qwen both take a language parameter for warmup
                 backend.warmup(language=self.language or "en")
             else:
                 backend.warmup()

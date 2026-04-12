@@ -19,7 +19,7 @@ import {
   type ModelFamily,
   type ModelRole,
 } from '../../src/services/modelRegistry';
-import { isWhisperModel } from '../../src/services/modelCapabilities';
+import { isWhisperModel, supportsLiveMode, isQwenModel } from '../../src/services/modelCapabilities';
 import {
   MAIN_MODEL_CUSTOM_OPTION,
   LIVE_MODEL_SAME_AS_MAIN_OPTION,
@@ -35,7 +35,7 @@ const DIARIZATION_DEFAULT_MODEL = 'pyannote/speaker-diarization-community-1';
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Families that require Docker and do not work in Metal mode. */
-const DOCKER_ONLY_FAMILIES: Set<ModelFamily> = new Set(['nemo', 'vibevoice', 'whispercpp']);
+const DOCKER_ONLY_FAMILIES: Set<ModelFamily> = new Set(['nemo', 'vibevoice', 'whispercpp', 'qwen']);
 
 export interface ModelManagerTabProps {
   mainModelSelection: string;
@@ -102,6 +102,13 @@ const FAMILY_SECTIONS: FamilySectionConfig[] = [
     borderClass: 'border-l-orange-400',
     badgeClass: 'bg-orange-500/10 text-orange-400',
     headerTextClass: 'text-orange-400',
+  },
+  {
+    family: 'qwen',
+    label: 'Qwen 3 (ASR)',
+    borderClass: 'border-l-rose-400',
+    badgeClass: 'bg-rose-500/10 text-rose-400',
+    headerTextClass: 'text-rose-400',
   },
   {
     family: 'diarization',
@@ -370,7 +377,7 @@ function CustomModelRow({
 
   const roleOptions: { role: ModelRole; label: string }[] = [
     { role: 'main', label: 'Main Transcriber' },
-    ...(isWhisperModel(modelId) ? [{ role: 'live' as ModelRole, label: 'Live Model' }] : []),
+    ...(supportsLiveMode(modelId) ? [{ role: 'live' as ModelRole, label: 'Live Model' }] : []),
     { role: 'diarization', label: 'Diarization Model' },
   ];
 
@@ -605,8 +612,8 @@ export const ModelManagerTab: React.FC<ModelManagerTabProps> = ({
           showToast(`Set ${modelId} as Main Transcriber`);
           break;
         case 'live':
-          if (!isWhisperModel(modelId)) {
-            showToast('Live Mode only supports faster-whisper models in v1.');
+          if (!supportsLiveMode(modelId)) {
+            showToast('Live Mode only supports faster-whisper, Qwen, or NeMo models in v1.');
             break;
           }
           if (isPreset && registryModel?.family === 'whisper') {

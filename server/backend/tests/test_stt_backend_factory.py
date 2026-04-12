@@ -8,6 +8,7 @@ from server.core.stt.backends.factory import (
     is_mlx_model,
     is_nemo_model,
     is_parakeet_model,
+    is_qwen_model,
     is_vibevoice_asr_model,
 )
 
@@ -27,6 +28,13 @@ def test_existing_backend_detection_unchanged() -> None:
     assert is_canary_model("nvidia/canary-1b-v2")
     assert is_nemo_model("nvidia/parakeet-tdt-0.6b-v3")
     assert is_nemo_model("nvidia/canary-1b-v2")
+
+
+def test_detects_qwen_backend() -> None:
+    assert detect_backend_type("Qwen/Qwen3-ASR-0.6B") == "qwen"
+    assert is_qwen_model("Qwen/Qwen3-ASR-0.6B")
+    assert detect_backend_type("Qwen/Qwen3.5-0.8B-Base") == "qwen"
+    assert is_qwen_model("Qwen/Qwen3.5-0.8B-Base")
 
 
 # ---------------------------------------------------------------------------

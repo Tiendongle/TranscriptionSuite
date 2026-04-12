@@ -6,10 +6,37 @@ set -e
 
 MODE="${1:-}"
 if [[ "$MODE" != "local" && "$MODE" != "remote" ]]; then
-    echo "Usage: $0 <local|remote>" >&2
+    echo "Usage: $0 <local|remote> [--tag <tag>] [--build]" >&2
     exit 2
 fi
-shift || true
+shift
+
+# Parse remaining arguments
+TAG="${TAG:-}"
+BUILD=false
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --tag)
+            TAG="$2"
+            shift 2
+            ;;
+        --build)
+            BUILD=true
+            shift
+            ;;
+        *)
+            # Ignore unknown arguments or handle them as needed
+            shift
+            ;;
+    esac
+done
+
+# Tag resolution
+if [[ -z "$TAG" ]]; then
+    TAG="latest"
+fi
+export TAG="$TAG"
 
 # ============================================================================
 # Container Runtime Detection (Docker or Podman)
@@ -67,7 +94,7 @@ RT_DISPLAY="Docker"
 # Constants
 # ============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOCKER_IMAGE="ghcr.io/homelab-00/transcriptionsuite-server:${TAG:?TAG must be set}"
+DOCKER_IMAGE="ghcr.io/homelab-00/transcriptionsuite-server:$TAG"
 CONTAINER_NAME="transcriptionsuite-container"
 HF_DIARIZATION_TERMS_URL="https://huggingface.co/pyannote/speaker-diarization-community-1"
 PROMPT_TIME_OFFSET_SECONDS=0
@@ -447,20 +474,59 @@ fi
 
 cd "$SCRIPT_DIR"
 
-# Build compose file list: base + linux host-network + GPU overlay
-# Podman uses CDI for GPU passthrough instead of Docker's deploy.resources
-if [[ "$RT" == "podman" ]]; then
-    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.linux-host.yml -f podman-compose.gpu.yml)
+# Build compose file list: base + platform overlay + GPU overlay
+COMPOSE_FILES=(-f docker-compose.yml)
+
+# Platform detection
+OS_TYPE="$(uname -s)"
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    # macOS (Docker Desktop) - handles port mapping and bridge networking
+    desktop_overlay="$SCRIPT_DIR/docker-compose.desktop-vm.yml"
+    if [[ -f "$desktop_overlay" ]]; then
+        print_info "Applying Desktop VM overlay (macOS port mapping enabled)"
+        COMPOSE_FILES+=(-f "$desktop_overlay")
+    fi
 else
-    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.linux-host.yml -f docker-compose.gpu.yml)
+    # Linux host-network
+    linux_overlay="$SCRIPT_DIR/docker-compose.linux-host.yml"
+    if [[ -f "$linux_overlay" ]]; then
+        COMPOSE_FILES+=(-f "$linux_overlay")
+    fi
 fi
 
+# GPU detection
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null 2>&1; then
+    gpu_overlay="$SCRIPT_DIR/docker-compose.gpu.yml"
+    if [[ "$RT" == "podman" ]]; then
+        gpu_overlay="$SCRIPT_DIR/podman-compose.gpu.yml"
+    fi
+
+    if [[ -f "$gpu_overlay" ]]; then
+        print_info "NVIDIA GPU detected, applying GPU overlay"
+        COMPOSE_FILES+=(-f "$gpu_overlay")
+    fi
+fi
+
+# ============================================================================
+# Build Container (if requested)
+# ============================================================================
+if [[ "$BUILD" == "true" ]]; then
+    print_status "Building TranscriptionSuite image (tag: $TAG)..."
+    if ! $RT compose "${COMPOSE_FILES[@]}" "${ENV_FILE_ARGS[@]}" build; then
+        print_error "Build failed"
+        exit 1
+    fi
+fi
+
+# ============================================================================
+# Start Container
+# ============================================================================
 compose_output=""
 if ! compose_output="$($RT compose "${COMPOSE_FILES[@]}" "${ENV_FILE_ARGS[@]}" up -d 2>&1)"; then
     echo "$compose_output"
     exit 1
 fi
-echo "$compose_output" | grep -v "WARN\[0000\] No services to build" || true
+echo "$compose_output" | grep -v "WARN[0000] No services to build" || true
 
 if [[ "$MODE" == "remote" ]]; then
     echo ""
