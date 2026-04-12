@@ -100,3 +100,100 @@
 {"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1775989333.2705991, "durationMs": 10141}
 {"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1775989778.3673728}
 {"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1775989791.7821698, "durationMs": 13415}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775992246.419105, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775992250.7365706, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775992251.3880126, "durationMs": 651, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775992251.3896074, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775993492.243383, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775993496.3947427, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775993497.054749, "durationMs": 660, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775993497.0564775, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1775993570.02332, "phase": "ready", "durationMs": 77785}
+{"id": "model-load-nvidia--canary-1b-v2", "category": "download", "label": "Loading canary-1b-v2...", "status": "active", "ts": 1775993662.0872958}
+{"id": "model-load-nvidia--canary-1b-v2", "category": "download", "label": "Failed to load canary-1b-v2", "status": "error", "ts": 1775993754.040256, "durationMs": 91958}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775994345.6891327, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775994348.9898214, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775994349.6519752, "durationMs": 662, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775994349.6537201, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775995427.9225392, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775995432.0534077, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775995432.7253845, "durationMs": 672, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775995432.7283683, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775995501.121779, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775995505.2281265, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775995505.8884852, "durationMs": 660, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775995505.8899722, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775996245.2642462, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775996249.6981368, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775996250.3514154, "durationMs": 653, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775996250.3529518, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775996277.3830326, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775996280.275772, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775996280.9313164, "durationMs": 655, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775996280.933063, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775996400.600941, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775996404.6762798, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775996405.3316774, "durationMs": 655, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775996405.3333194, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775996592.4666922, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775996598.1377928, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775996598.803235, "durationMs": 665, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775996598.8049366, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775996649.624097, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775996652.6621914, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775996653.3396237, "durationMs": 677, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775996653.3410916, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775997021.6057541, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775997025.7514896, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775997026.4026618, "durationMs": 651, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775997026.4043617, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775997410.935322, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775997415.4250393, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775997416.0728333, "durationMs": 648, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775997416.0748055, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775997554.6430707, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775997558.760622, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775997559.4240077, "durationMs": 663, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775997559.4257462, "persistent": true}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775997608.1064386, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775997611.0843892, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775997611.7394164, "durationMs": 655, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775997611.741077, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1775997648.0555508, "phase": "ready", "durationMs": 39951}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1775997786.3256779}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1775997807.8041236, "durationMs": 21478}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1775998094.8768597}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1775998108.9533193, "durationMs": 14076}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775998127.9841282, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775998131.4539602, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775998132.112008, "durationMs": 658, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775998132.1135657, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1775998162.104308, "phase": "ready", "durationMs": 34121}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1775999787.418581}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1775999803.5554738, "durationMs": 16138}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1775999819.4324636, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1775999823.1043243, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1775999823.7549684, "durationMs": 651, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1775999823.7567077, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1775999855.5540116, "phase": "ready", "durationMs": 36124}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1775999980.770052}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1775999995.896809, "durationMs": 15127}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1776000449.1934183, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1776000453.9346387, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1776000454.585045, "durationMs": 650, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1776000454.5867784, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1776000534.9704194, "phase": "ready", "durationMs": 85781}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1776000851.7097452}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1776000864.647524, "durationMs": 12938}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1776000882.6665635, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1776000885.9340785, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1776000886.5753822, "durationMs": 641, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1776000886.5772657, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1776000921.212097, "phase": "ready", "durationMs": 38546}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Loading Qwen3-ASR-0.6B...", "status": "active", "ts": 1776001268.3082712}
+{"id": "model-load-Qwen--Qwen3-ASR-0.6B", "category": "download", "label": "Qwen3-ASR-0.6B loaded from cache", "status": "complete", "ts": 1776001281.4761086, "durationMs": 13168}
+{"id": "lifespan-start", "category": "server", "label": "Starting server...", "status": "active", "ts": 1776001964.6481352, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "Checking GPU...", "status": "active", "ts": 1776001968.5103025, "phase": "lifespan"}
+{"id": "lifespan-gpu", "category": "server", "label": "GPU check complete", "status": "complete", "ts": 1776001969.166259, "durationMs": 656, "phase": "lifespan"}
+{"id": "warn-gpu", "category": "warning", "label": "No GPU detected \u2014 CPU mode", "status": "active", "ts": 1776001969.1685648, "persistent": true}
+{"id": "server-ready", "category": "server", "label": "Server ready", "status": "complete", "ts": 1776002011.6300771, "phase": "ready", "durationMs": 46983}

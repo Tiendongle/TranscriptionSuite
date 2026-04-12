@@ -107,9 +107,9 @@ class LiveModeSession:
             # Event loop closed — session is shutting down
             logger.debug("Event loop closed, dropping queued message")
 
-    def _on_sentence(self, text: str) -> None:
+    def _on_sentence(self, text: str, source_text: str = "") -> None:
         """Callback when a sentence is completed."""
-        self._queue_message("sentence", {"text": text})
+        self._queue_message("sentence", {"text": text, "source_text": source_text})
         # Fire outgoing webhook (thread-safe — this runs in engine's background thread)
         from server.core.webhook import dispatch_fire_and_forget
 
@@ -119,6 +119,7 @@ class LiveModeSession:
             {
                 "source": "live",
                 "text": text,
+                "source_text": source_text,
             },
         )
 

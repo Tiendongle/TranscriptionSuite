@@ -76,6 +76,7 @@ class TranscriptionResult:
     """Result of a transcription operation."""
 
     text: str
+    source_text: str = ""
     language: str | None = None
     language_probability: float = 0.0
     duration: float = 0.0
@@ -87,6 +88,7 @@ class TranscriptionResult:
         """Convert to dictionary for API responses."""
         return {
             "text": self.text,
+            "source_text": self.source_text,
             "segments": self.segments,
             "words": self.words,
             "language": self.language,
@@ -730,9 +732,11 @@ class AudioToTextRecorder:
                 all_segments = []
                 all_words = []
                 full_text_parts = []
+                full_source_text_parts = []
 
                 for segment in backend_segments:
-                    text = segment.text
+                    source_text = segment.text
+                    text = source_text
                     if self.translation_backend and self.task == "translate":
                         text = self.translation_backend.translate(
                             text,
@@ -742,6 +746,7 @@ class AudioToTextRecorder:
 
                     seg_dict = {
                         "text": text,
+                        "source_text": source_text,
                         "start": segment.start,
                         "end": segment.end,
                     }
@@ -752,9 +757,13 @@ class AudioToTextRecorder:
 
                     all_segments.append(seg_dict)
                     full_text_parts.append(text)
+                    full_source_text_parts.append(source_text)
 
                 full_text = " ".join(full_text_parts).strip()
                 full_text = self._preprocess_output(full_text)
+                
+                full_source_text = " ".join(full_source_text_parts).strip()
+                full_source_text = self._preprocess_output(full_source_text)
 
                 elapsed = time.time() - start_time
                 logger.debug(f"Transcription completed in {elapsed:.2f}s")
@@ -763,6 +772,7 @@ class AudioToTextRecorder:
 
                 return TranscriptionResult(
                     text=full_text,
+                    source_text=full_source_text,
                     language=backend_info.language,
                     language_probability=backend_info.language_probability,
                     duration=len(audio) / SAMPLE_RATE,

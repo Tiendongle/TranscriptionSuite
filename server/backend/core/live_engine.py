@@ -153,13 +153,13 @@ class LiveModeEngine:
         if self._state == LiveModeState.PROCESSING:
             self._set_state(LiveModeState.LISTENING)
 
-    def _process_sentence(self, text: str) -> None:
+    def _process_sentence(self, text: str, source_text: str = "") -> None:
         """Process a completed sentence."""
         if not text or not text.strip():
             return
 
         text = text.strip()
-        logger.info(f"Live Mode sentence: {text}")
+        logger.info(f"Live Mode sentence: {text} (source: {source_text})")
 
         # Add to history
         self._sentence_history.append(text)
@@ -169,7 +169,8 @@ class LiveModeEngine:
         # Trigger callback
         if self._on_sentence:
             try:
-                self._on_sentence(text)
+                # Update: Send both translated and source text if available
+                self._on_sentence(text, source_text)
             except Exception as e:
                 logger.error(f"Sentence callback error: {e}")
 
@@ -212,10 +213,16 @@ class LiveModeEngine:
             # Process sentences in a loop
             while not self._stop_event.is_set():
                 try:
-                    # text() blocks until a sentence is complete
-                    text = self._recorder.text()
-                    if text:
-                        self._process_sentence(text)
+                    # wait_audio() blocks until VAD detects speech has ended
+                    self._recorder.wait_audio()
+                    
+                    if self._stop_event.is_set() or self._recorder.is_shut_down:
+                        break
+                        
+                    # transcribe() performs the actual ASR and translation
+                    result = self._recorder.transcribe()
+                    if result and result.text:
+                        self._process_sentence(result.text, result.source_text)
                 except Exception as e:
                     if not self._stop_event.is_set():
                         logger.error(f"Live Mode transcription error: {e}")

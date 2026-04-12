@@ -19,6 +19,7 @@ export type LiveStatus =
 
 export interface LiveSentence {
   text: string;
+  sourceText?: string;
   timestamp: number; // Date.now() when received
 }
 
@@ -144,6 +145,7 @@ export function useLiveMode(): LiveModeState {
           ...prev,
           {
             text: (msg.data?.text as string) ?? '',
+            sourceText: (msg.data?.source_text as string) ?? '',
             timestamp: Date.now(),
           },
         ]);
@@ -244,7 +246,9 @@ export function useLiveMode(): LiveModeState {
   }, []);
 
   const getText = useCallback(() => {
-    return sentences.map((s) => s.text).join(' ');
+    return sentences
+      .map((s) => (s.sourceText && s.sourceText !== s.text ? `${s.text} [${s.sourceText}]` : s.text))
+      .join(' ');
   }, [sentences]);
 
   return {
