@@ -261,6 +261,7 @@ export interface ElectronAPI {
       mainTranscriberModel?: string;
       liveTranscriberModel?: string;
       diarizationModel?: string;
+      translationModel?: string;
     }) => Promise<void>;
     stop: () => Promise<void>;
     getStatus: () => Promise<'stopped' | 'starting' | 'running' | 'stopping' | 'error'>;

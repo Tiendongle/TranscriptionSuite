@@ -11,8 +11,10 @@ and the STT engine. Handles:
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from server.core.stt.backends.base import TranslationBackend
 
 import numpy as np
 
@@ -52,6 +54,7 @@ class RealtimeTranscriptionEngine:
         on_recording_stop: Callable[[], None] | None = None,
         on_vad_start: Callable[[], None] | None = None,
         on_vad_stop: Callable[[], None] | None = None,
+        translation_backend: "TranslationBackend | None" = None,
     ):
         """
         Initialize the real-time transcription engine.
@@ -68,13 +71,19 @@ class RealtimeTranscriptionEngine:
         self.on_recording_stop = on_recording_stop
         self.on_vad_start = on_vad_start
         self.on_vad_stop = on_vad_stop
+        self.translation_backend = translation_backend
 
         self._engine: Any | None = None
         self._initialized = False
         self._is_recording = False
         self._language: str | None = None
 
-    def initialize(self, language: str | None = None) -> None:
+    def initialize(
+        self,
+        language: str | None = None,
+        translation_enabled: bool = False,
+        translation_target_language: str = "en",
+    ) -> None:
         """
         Initialize the underlying STT engine.
 
@@ -119,6 +128,9 @@ class RealtimeTranscriptionEngine:
             on_recording_stop=self._handle_recording_stop,
             on_vad_start=self._handle_vad_start,
             on_vad_stop=self._handle_vad_stop,
+            task=("translate" if translation_enabled else "transcribe"),
+            translation_target_language=translation_target_language,
+            translation_backend=self.translation_backend,
         )
 
         self._initialized = True
@@ -166,7 +178,12 @@ class RealtimeTranscriptionEngine:
 
         self._engine.feed_audio(audio_data, sample_rate)
 
-    def start_recording(self, language: str | None = None) -> None:
+    def start_recording(
+        self,
+        language: str | None = None,
+        translation_enabled: bool = False,
+        translation_target_language: str = "en",
+    ) -> None:
         """
         Start recording session.
 
@@ -174,7 +191,7 @@ class RealtimeTranscriptionEngine:
             language: Target language code (None for auto-detect)
         """
         if not self._initialized:
-            self.initialize(language)
+            self.initialize(language, translation_enabled, translation_target_language)
         elif language and language != self._language:
             self._language = language
             # Note: Language change mid-session not fully supported
@@ -261,4 +278,5 @@ def create_realtime_engine(
         on_recording_stop=callbacks.get("on_recording_stop"),
         on_vad_start=callbacks.get("on_vad_start"),
         on_vad_stop=callbacks.get("on_vad_stop"),
+        translation_backend=callbacks.get("translation_backend"),
     )

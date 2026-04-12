@@ -22,6 +22,7 @@ import {
   Laptop,
   Radio,
   Zap,
+  Globe,
   MinusCircle,
 } from 'lucide-react';
 import { GlassCard } from '../ui/GlassCard';
@@ -54,8 +55,13 @@ import {
   MAIN_MODEL_PRESETS,
   LIVE_MODEL_PRESETS,
   VULKAN_RECOMMENDED_MODEL,
+  TRANSLATION_RECOMMENDED_MODEL,
+  TRANSLATION_MODEL_CUSTOM_OPTION,
+  TRANSLATION_MODEL_DISABLED_OPTION,
+  TRANSLATION_MODEL_PRESETS,
   resolveMainModelSelectionValue,
   resolveLiveModelSelectionValue,
+  resolveTranslationModelSelectionValue,
   toBackendModelEnvValue,
 } from '../../src/services/modelSelection';
 import { getModelById } from '../../src/services/modelRegistry';
@@ -74,6 +80,7 @@ interface ServerViewProps {
       mainTranscriberModel?: string;
       liveTranscriberModel?: string;
       diarizationModel?: string;
+      translationModel?: string;
       whispercppModel?: string;
     },
   ) => Promise<void>;
@@ -112,6 +119,12 @@ const DIARIZATION_MODEL_SELECTION_OPTIONS = new Set([
   DIARIZATION_DEFAULT_MODEL,
   DIARIZATION_MODEL_CUSTOM_OPTION,
 ]);
+const TRANSLATION_MODEL_SELECTION_OPTIONS = new Set([
+  TRANSLATION_RECOMMENDED_MODEL,
+  ...TRANSLATION_MODEL_PRESETS,
+  TRANSLATION_MODEL_DISABLED_OPTION,
+  TRANSLATION_MODEL_CUSTOM_OPTION,
+]);
 
 // IDs of models that require the Metal/MLX runtime.
 const MLX_MODEL_IDS = new Set(MODEL_REGISTRY.filter((m) => m.family === 'mlx').map((m) => m.id));
@@ -123,6 +136,7 @@ const UI_SENTINEL_VALUES = new Set([
   LIVE_MODEL_CUSTOM_OPTION,
   DIARIZATION_SORTFORMER_OPTION,
   DIARIZATION_MODEL_CUSTOM_OPTION,
+  TRANSLATION_MODEL_CUSTOM_OPTION,
 ]);
 
 function sanitizeModelName(value: string): string {
@@ -207,6 +221,18 @@ function mapDiarizationModelToSelection(modelName: string): { selection: string;
   return { selection: DIARIZATION_MODEL_CUSTOM_OPTION, custom: modelName };
 }
 
+function mapTranslationModelToSelection(modelName: string): { selection: string; custom: string } {
+  const normalizedModel = normalizeModelName(modelName);
+  if (!normalizedModel || normalizedModel === normalizeModelName(DISABLED_MODEL_SENTINEL)) {
+    return { selection: TRANSLATION_MODEL_DISABLED_OPTION, custom: '' };
+  }
+  const preset = findCaseInsensitivePreset(modelName, TRANSLATION_MODEL_PRESETS);
+  if (preset) {
+    return { selection: preset, custom: '' };
+  }
+  return { selection: TRANSLATION_MODEL_CUSTOM_OPTION, custom: modelName };
+}
+
 export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFlowPending }) => {
   const { status: adminStatus, refresh: refreshAdminStatus } = useAdminStatus();
   const docker = useDockerContext();
@@ -223,6 +249,11 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
   );
   const [diarizationCustomModel, setDiarizationCustomModel] = useState('');
   const [diarizationHydrated, setDiarizationHydrated] = useState(false);
+  const [translationModelSelection, setTranslationModelSelection] = useState(
+    TRANSLATION_RECOMMENDED_MODEL,
+  );
+  const [translationCustomModel, setTranslationCustomModel] = useState('');
+  const [translationHydrated, setTranslationHydrated] = useState(false);
   const [whispercppModelSelection, setWhispercppModelSelection] = useState(GGML_DEFAULT_DISPLAY);
   const [modelsLoading, setModelsLoading] = useState(false);
 
@@ -354,6 +385,8 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
       api.config.get('server.liveCustomModel'),
       api.config.get('server.diarizationModelSelection'),
       api.config.get('server.diarizationCustomModel'),
+      api.config.get('server.translationModelSelection'),
+      api.config.get('server.translationCustomModel'),
       api.config.get('server.whispercppModel'),
     ])
       .then(
@@ -364,6 +397,8 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
           storedLiveCustom,
           storedDiarizationSelection,
           storedDiarizationCustom,
+          storedTranslationSelection,
+          storedTranslationCustom,
           storedWhispercppModel,
         ]: unknown[]) => {
           if (!active) return;
@@ -459,12 +494,35 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
             nextDiarizationCustom = '';
           }
 
+          let nextTranslationSelection =
+            getString(storedTranslationSelection) ?? TRANSLATION_RECOMMENDED_MODEL;
+          let nextTranslationCustom = getString(storedTranslationCustom) ?? '';
+
+          if (!TRANSLATION_MODEL_SELECTION_OPTIONS.has(nextTranslationSelection)) {
+            if (
+              normalizeModelName(nextTranslationSelection) ===
+              normalizeModelName(DISABLED_MODEL_SENTINEL)
+            ) {
+              nextTranslationSelection = TRANSLATION_MODEL_DISABLED_OPTION;
+            } else if (nextTranslationSelection) {
+              nextTranslationCustom = nextTranslationSelection;
+              nextTranslationSelection = TRANSLATION_MODEL_CUSTOM_OPTION;
+            } else {
+              nextTranslationSelection = TRANSLATION_RECOMMENDED_MODEL;
+            }
+          }
+          if (nextTranslationSelection !== TRANSLATION_MODEL_CUSTOM_OPTION) {
+            nextTranslationCustom = '';
+          }
+
           setMainModelSelection(nextMainSelection);
           setMainCustomModel(nextMainCustom);
           setLiveModelSelection(nextLiveSelection);
           setLiveCustomModel(nextLiveCustom);
           setDiarizationModelSelection(nextDiarizationSelection);
           setDiarizationCustomModel(nextDiarizationCustom);
+          setTranslationModelSelection(nextTranslationSelection);
+          setTranslationCustomModel(nextTranslationCustom);
           const storedGgml = getString(storedWhispercppModel);
           if (storedGgml) {
             if (GGML_DISPLAY_TO_ID.has(storedGgml)) {
@@ -569,6 +627,17 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
                     !storedDiarizationModel
                   ? ''
                   : storedDiarizationModel;
+
+            const storedTranslationModel =
+              (await api.config?.get('server.translationModelSelection').catch(() => '')) ?? '';
+            const storedTranslationCustom =
+              (await api.config?.get('server.translationCustomModel').catch(() => '')) ?? '';
+            const resolvedTranslation = resolveTranslationModelSelectionValue(
+                storedTranslationModel,
+                storedTranslationCustom,
+                ''
+            );
+
             const resolvedMain =
               resolveMainModelSelectionValue(storedModel, storedCustomModel, '') ||
               MLX_DEFAULT_MODEL;
@@ -585,6 +654,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
               mainTranscriberModel: sanitizeModelName(resolvedMain) || MLX_DEFAULT_MODEL,
               liveTranscriberModel: sanitizeModelName(normalizedLive) || undefined,
               diarizationModel: resolvedDiarization || undefined,
+              translationModel: sanitizeModelName(resolvedTranslation) || undefined,
             });
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -609,6 +679,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     mainTranscriber: string;
     liveModel: string;
     diarizationModel: string;
+    translationModel: string;
   } | null>(null);
 
   // Sync mlxStatus from the main process on mount and subscribe to push updates.
@@ -686,6 +757,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     adminConfig.live_transcription ??
     {}) as Record<string, unknown>;
   const adminDiarizationCfg = (adminConfig.diarization ?? {}) as Record<string, unknown>;
+  const adminTranslationCfg = (adminConfig.translation ?? {}) as Record<string, unknown>;
   const adminLegacyTranscriptionCfg = (adminConfig.transcription ?? {}) as Record<string, unknown>;
   const adminModels = (adminStatus?.models ?? {}) as Record<string, unknown>;
   const adminModelTranscription = (adminModels.transcription ?? {}) as Record<string, unknown>;
@@ -695,6 +767,8 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
   >;
   const adminModelDiarization = (adminModels.diarization ?? {}) as Record<string, unknown>;
   const adminModelDiarizationCfg = (adminModelDiarization.config ?? {}) as Record<string, unknown>;
+  const adminModelTranslation = (adminModels.translation ?? {}) as Record<string, unknown>;
+  const adminModelTranslationCfg = (adminModelTranslation.config ?? {}) as Record<string, unknown>;
 
   const configuredMainModel =
     getString(adminMainCfg.model) ??
@@ -706,6 +780,11 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     getString(adminDiarizationCfg.model) ??
     getString(adminModelDiarizationCfg.model) ??
     getString(adminModelDiarization.model) ??
+    '';
+  const configuredTranslationModel =
+    getString(adminTranslationCfg.model) ??
+    getString(adminModelTranslationCfg.model) ??
+    getString(adminModelTranslation.model) ??
     '';
 
   useEffect(() => {
@@ -759,6 +838,24 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     localSelectionsHydrated,
   ]);
 
+  useEffect(() => {
+    if (!localSelectionsHydrated || translationHydrated || !adminStatus) return;
+
+    if (translationModelSelection === TRANSLATION_RECOMMENDED_MODEL && configuredTranslationModel) {
+      const mappedTranslation = mapTranslationModelToSelection(configuredTranslationModel);
+      setTranslationModelSelection(mappedTranslation.selection);
+      setTranslationCustomModel(mappedTranslation.custom);
+    }
+
+    setTranslationHydrated(true);
+  }, [
+    adminStatus,
+    translationHydrated,
+    localSelectionsHydrated,
+    translationModelSelection,
+    configuredTranslationModel,
+  ]);
+
   const activeTranscriber = resolveMainModelSelectionValue(
     mainModelSelection,
     mainCustomModel,
@@ -776,13 +873,18 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
   const liveModeModelConstraintMessage =
     'Live Mode only supports faster-whisper, Qwen, or NeMo models.';
 
-  // Active diarization model name — empty string = Sortformer (server auto-select)
   const activeDiarizationModel =
     diarizationModelSelection === DIARIZATION_MODEL_CUSTOM_OPTION
       ? diarizationCustomModel.trim() || configuredDiarizationModel || DIARIZATION_DEFAULT_MODEL
       : diarizationModelSelection === DIARIZATION_SORTFORMER_OPTION
         ? ''
         : DIARIZATION_DEFAULT_MODEL;
+
+  const activeTranslationModel = resolveTranslationModelSelectionValue(
+    translationModelSelection,
+    translationCustomModel,
+    '',
+  );
 
   // MLX native-process start/stop handlers (depend on activeTranscriber declared above)
   const handleMLXStart = useCallback(async () => {
@@ -794,6 +896,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
       const mainModel = sanitizeModelName(activeTranscriber) || MLX_DEFAULT_MODEL;
       const liveModel = sanitizeModelName(normalizedLiveModel) || undefined;
       const diarizationModel = sanitizeModelName(activeDiarizationModel) || undefined;
+      const translationModel = sanitizeModelName(activeTranslationModel) || undefined;
       await api.mlx.start({
         port: Number(port),
         hfToken: hfToken || undefined,
@@ -805,12 +908,13 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
         mainTranscriber: mainModel,
         liveModel: liveModel ?? '',
         diarizationModel: diarizationModel ?? '',
+        translationModel: translationModel ?? '',
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to start Metal server: ${msg}`);
     }
-  }, [activeTranscriber, normalizedLiveModel, activeDiarizationModel]);
+  }, [activeTranscriber, normalizedLiveModel, activeDiarizationModel, activeTranslationModel]);
 
   const handleMLXStop = useCallback(async () => {
     const api = (window as any).electronAPI;
@@ -828,33 +932,38 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
       mainTranscriber: sanitizeModelName(activeTranscriber) || MLX_DEFAULT_MODEL,
       liveModel: sanitizeModelName(normalizedLiveModel) ?? '',
       diarizationModel: sanitizeModelName(activeDiarizationModel) ?? '',
+      translationModel: sanitizeModelName(activeTranslationModel) ?? '',
     };
   }, [
     localSelectionsHydrated,
     modelsHydrated,
     diarizationHydrated,
+    translationHydrated,
     mlxStatus,
     activeTranscriber,
     normalizedLiveModel,
     activeDiarizationModel,
+    activeTranslationModel,
   ]);
 
   // Auto-restart the MLX server when the user changes the main transcriber, live model,
   // or diarization model while the server is already running in bare-metal mode.
   useEffect(() => {
-    if (!isMetal || !localSelectionsHydrated || !modelsHydrated || !diarizationHydrated) return;
+    if (!isMetal || !localSelectionsHydrated || !modelsHydrated || !diarizationHydrated || !translationHydrated) return;
     if (mlxStatus !== 'running') return;
     if (!committedModelsRef.current) return;
 
     const currentMain = sanitizeModelName(activeTranscriber) || MLX_DEFAULT_MODEL;
     const currentLive = sanitizeModelName(normalizedLiveModel) ?? '';
     const currentDiarization = sanitizeModelName(activeDiarizationModel) ?? '';
+    const currentTranslation = sanitizeModelName(activeTranslationModel) ?? '';
     const committed = committedModelsRef.current;
 
     if (
       currentMain === committed.mainTranscriber &&
       currentLive === committed.liveModel &&
-      currentDiarization === committed.diarizationModel
+      currentDiarization === committed.diarizationModel &&
+      currentTranslation === committed.translationModel
     ) {
       return;
     }
@@ -873,7 +982,8 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
         latestCommitted &&
         currentMain === latestCommitted.mainTranscriber &&
         currentLive === latestCommitted.liveModel &&
-        currentDiarization === latestCommitted.diarizationModel
+        currentDiarization === latestCommitted.diarizationModel &&
+        currentTranslation === latestCommitted.translationModel
       ) {
         return;
       }
@@ -888,11 +998,13 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
           mainTranscriberModel: currentMain,
           liveTranscriberModel: currentLive || undefined,
           diarizationModel: currentDiarization || undefined,
+          translationModel: currentTranslation || undefined,
         });
         committedModelsRef.current = {
           mainTranscriber: currentMain,
           liveModel: currentLive,
           diarizationModel: currentDiarization,
+          translationModel: currentTranslation,
         };
         toast.success('Inference server restarted.', { id: toastId });
       } catch (err) {
@@ -907,10 +1019,12 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     localSelectionsHydrated,
     modelsHydrated,
     diarizationHydrated,
+    translationHydrated,
     mlxStatus,
     activeTranscriber,
     normalizedLiveModel,
     activeDiarizationModel,
+    activeTranslationModel,
   ]);
 
   // Hard-reset any non-whisper live model selection to the default whisper model.
@@ -984,6 +1098,22 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
     if (!localSelectionsHydrated) return;
     const api = (window as any).electronAPI;
     if (!api?.config) return;
+    void api.config
+      .set('server.translationModelSelection', translationModelSelection)
+      .catch(() => {});
+  }, [localSelectionsHydrated, translationModelSelection]);
+
+  useEffect(() => {
+    if (!localSelectionsHydrated) return;
+    const api = (window as any).electronAPI;
+    if (!api?.config) return;
+    void api.config.set('server.translationCustomModel', translationCustomModel).catch(() => {});
+  }, [localSelectionsHydrated, translationCustomModel]);
+
+  useEffect(() => {
+    if (!localSelectionsHydrated) return;
+    const api = (window as any).electronAPI;
+    if (!api?.config) return;
     void api.config.set('server.whispercppModel', whispercppModelSelection).catch(() => {});
   }, [localSelectionsHydrated, whispercppModelSelection]);
 
@@ -994,7 +1124,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
 
     // Collect unique model IDs to check
     const modelIds = [
-      ...new Set([activeTranscriber, normalizedLiveModel, activeDiarizationModel]),
+      ...new Set([activeTranscriber, normalizedLiveModel, activeDiarizationModel, activeTranslationModel]),
     ].filter(
       (id) => id && id !== MODEL_DEFAULT_LOADING_PLACEHOLDER && id !== DISABLED_MODEL_SENTINEL,
     );
@@ -1649,6 +1779,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
                             mainTranscriberModel: sanitizeModelName(activeTranscriber),
                             liveTranscriberModel: sanitizeModelName(normalizedLiveModel),
                             diarizationModel: sanitizeModelName(activeDiarizationModel),
+                            translationModel: sanitizeModelName(activeTranslationModel),
                             ...(runtimeProfile === 'vulkan'
                               ? {
                                   whispercppModel: `/models/${GGML_DISPLAY_TO_ID.get(whispercppModelSelection) ?? 'ggml-large-v3-turbo.bin'}`,
@@ -1678,6 +1809,7 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
                             mainTranscriberModel: sanitizeModelName(activeTranscriber),
                             liveTranscriberModel: sanitizeModelName(normalizedLiveModel),
                             diarizationModel: sanitizeModelName(activeDiarizationModel),
+                            translationModel: sanitizeModelName(activeTranslationModel),
                             ...(runtimeProfile === 'vulkan'
                               ? {
                                   whispercppModel: `/models/${GGML_DISPLAY_TO_ID.get(whispercppModelSelection) ?? 'ggml-large-v3-turbo.bin'}`,
@@ -2194,13 +2326,63 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
             </GlassCard>
           </div>
 
-          {/* 5. Volumes Card */}
+          {/* 5. Translation Models Card */}
+          <div className="relative shrink-0 border-l-2 border-white/10 pb-8 pl-8 last:border-0 last:pb-0">
+            <div className="absolute top-0 -left-4.25 z-10 flex h-8 w-8 items-center justify-center rounded-full border-4 border-slate-900 bg-slate-800 text-slate-300">
+              <Globe size={14} />
+            </div>
+            <GlassCard title="5. Translation Models Configuration">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-300">Translation Model</label>
+                  {isRunning && activeTranslationModel && activeTranslationModel !== DISABLED_MODEL_SENTINEL && (
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-block h-2 w-2 rounded-full ${modelCacheStatus[activeTranslationModel]?.exists ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]' : 'bg-slate-500'}`}
+                      />
+                      <span
+                        className={`font-mono text-[10px] ${modelCacheStatus[activeTranslationModel]?.exists ? 'text-green-400' : 'text-slate-500'}`}
+                      >
+                        {modelCacheStatus[activeTranslationModel]?.exists
+                          ? 'Downloaded'
+                          : 'Missing'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <CustomSelect
+                  value={translationModelSelection}
+                  onChange={setTranslationModelSelection}
+                  options={[
+                      TRANSLATION_RECOMMENDED_MODEL,
+                      ...TRANSLATION_MODEL_PRESETS.filter(m => m !== TRANSLATION_RECOMMENDED_MODEL),
+                      TRANSLATION_MODEL_DISABLED_OPTION,
+                      TRANSLATION_MODEL_CUSTOM_OPTION
+                  ]}
+                  className="focus:ring-accent-cyan h-10 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white transition-shadow outline-none focus:ring-1"
+                  disabled={isRunning}
+                />
+                {translationModelSelection === TRANSLATION_MODEL_CUSTOM_OPTION && (
+                  <input
+                    type="text"
+                    value={translationCustomModel}
+                    onChange={(e) => setTranslationCustomModel(e.target.value)}
+                    placeholder="owner/model-name"
+                    disabled={isRunning}
+                    className={`focus:ring-accent-cyan h-10 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white placeholder-slate-500 transition-shadow outline-none focus:ring-1${isRunning ? 'cursor-not-allowed opacity-50' : ''}`}
+                  />
+                )}
+              </div>
+            </GlassCard>
+          </div>
+
+          {/* 6. Volumes Card */}
           <div className="relative shrink-0 border-l-2 border-white/10 pb-2 pl-8 last:border-0 last:pb-0">
             <div className="absolute top-0 -left-4.25 z-10 flex h-8 w-8 items-center justify-center rounded-full border-4 border-slate-900 bg-slate-800 text-slate-300">
               <HardDrive size={14} />
             </div>
             <GlassCard
-              title="5. Persistent Volumes"
+              title="6. Persistent Volumes"
               action={
                 !isMetal ? (
                   <Button
@@ -2299,12 +2481,12 @@ export const ServerView: React.FC<ServerViewProps> = ({ onStartServer, startupFl
             </GlassCard>
           </div>
 
-          {/* 6. Clean Up */}
+          {/* 7. Clean Up */}
           <div className="relative shrink-0 border-l-2 border-white/10 pb-2 pl-8 last:border-0 last:pb-0">
             <div className="absolute top-0 -left-4.25 z-10 flex h-8 w-8 items-center justify-center rounded-full border-4 border-slate-900 bg-slate-800 text-slate-300">
               <AlertTriangle size={14} />
             </div>
-            <GlassCard title="6. Clean Up">
+            <GlassCard title="7. Clean Up">
               <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div className="space-y-1">

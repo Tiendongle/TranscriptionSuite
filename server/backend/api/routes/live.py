@@ -342,6 +342,7 @@ class LiveModeSession:
                 on_realtime_update=self._on_realtime_update,
                 on_state_change=self._on_state_change,
                 shared_backend=shared_backend,
+                translation_backend=model_manager.translation_engine if config.translation_enabled else None,
             )
 
             # Start the engine

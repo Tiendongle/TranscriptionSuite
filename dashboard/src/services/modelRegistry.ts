@@ -14,6 +14,7 @@ import {
   isMLXModel,
   isMLXParakeetModel,
   isQwenModel,
+  isNLLBModel,
 } from './modelCapabilities';
 
 export type ModelFamily =
@@ -25,8 +26,9 @@ export type ModelFamily =
   | 'diarization'
   | 'custom'
   | 'qwen'
+  | 'translation'
   | 'none';
-export type ModelRole = 'main' | 'live' | 'diarization';
+export type ModelRole = 'main' | 'live' | 'diarization' | 'translator';
 
 export interface ModelInfo {
   /** HuggingFace repo ID (e.g. "Systran/faster-whisper-large-v3") or GGML filename (e.g. "ggml-large-v3-turbo-q8_0.bin") */
@@ -582,6 +584,29 @@ export const MODEL_REGISTRY: ModelInfo[] = [
     roles: ['diarization'],
     requiresRuntime: 'cuda',
   },
+  // ── Translation ──────────────────────────────────────────────────────────
+  {
+    id: 'Xenova/nllb-200-distilled-600M',
+    displayName: 'NLLB-200 600M',
+    family: 'translation',
+    description: 'No Language Left Behind (NLLB) distilled 600M parameters. Supports translation across 200 languages.',
+    parameterCount: '600M',
+    huggingfaceUrl: 'https://huggingface.co/Xenova/nllb-200-distilled-600M',
+    capabilities: { translation: true, liveMode: true, diarization: false, languageCount: 200 },
+    roles: ['translator'],
+    requiresRuntime: 'cuda',
+  },
+  {
+    id: 'Xenova/nllb-200-3.3B',
+    displayName: 'NLLB-200 3.3B',
+    family: 'translation',
+    description: 'NLLB-200 large model with 3.3B parameters. Superior translation quality (~13 GB).',
+    parameterCount: '3.3B',
+    huggingfaceUrl: 'https://huggingface.co/Xenova/nllb-200-3.3B',
+    capabilities: { translation: true, liveMode: true, diarization: false, languageCount: 200 },
+    roles: ['translator'],
+    requiresRuntime: 'cuda',
+  },
 ];
 
 /** Return registry models grouped by family. */
@@ -604,5 +629,6 @@ export function detectModelFamily(modelId: string): ModelFamily {
   if (isVibeVoiceASRModel(modelId)) return 'vibevoice';
   if (isWhisperCppModel(modelId)) return 'whispercpp';
   if (isQwenModel(modelId)) return 'qwen';
+  if (isNLLBModel(modelId)) return 'translation';
   return 'whisper';
 }

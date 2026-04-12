@@ -28,12 +28,17 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
 from scipy.signal import resample
+
 from server.config import get_config, resolve_main_transcriber_model
+
+if TYPE_CHECKING:
+    from server.core.stt.backends.base import TranslationBackend
+
 from server.core.stt.backends.factory import create_backend, detect_backend_type
 from server.core.stt.capabilities import validate_translation_request
 from server.core.stt.vad import VoiceActivityDetector
@@ -151,6 +156,7 @@ class AudioToTextRecorder:
         initial_prompt: str | None = None,
         suppress_tokens: list[int] | None = None,
         shared_backend: Any | None = None,
+        translation_backend: "TranslationBackend | None" = None,
     ):
         """
         Initialize the server-side audio recorder.
@@ -213,6 +219,10 @@ class AudioToTextRecorder:
         self.gpu_device_index = gpu_device_index
         self.batch_size = batch_size if batch_size is not None else main_cfg.get("batch_size", 16)
         self.beam_size = beam_size if beam_size is not None else main_cfg.get("beam_size", 5)
+
+        self.initial_prompt = initial_prompt
+        self.suppress_tokens = suppress_tokens
+        self.translation_backend = translation_backend
 
         # VAD parameters - resolve from config (stt section is primary, live_transcriber for silero)
         silero_sensitivity = (
@@ -697,11 +707,17 @@ class AudioToTextRecorder:
                 if self._backend is None:
                     raise RuntimeError(_model_not_loaded_message(self.model_name))
 
+                # If we have a dedicated translation engine, we force the STT backend
+                # to "transcribe" to get source-language text for the translator.
+                stt_task = self.task
+                if self.translation_backend and self.task == "translate":
+                    stt_task = "transcribe"
+
                 # Transcribe via backend
                 backend_segments, backend_info = self._backend.transcribe(
                     audio,
                     language=self.language if self.language else None,
-                    task=self.task,
+                    task=stt_task,
                     beam_size=self.beam_size,
                     initial_prompt=self.initial_prompt,
                     suppress_tokens=self.suppress_tokens,
@@ -716,8 +732,16 @@ class AudioToTextRecorder:
                 full_text_parts = []
 
                 for segment in backend_segments:
+                    text = segment.text
+                    if self.translation_backend and self.task == "translate":
+                        text = self.translation_backend.translate(
+                            text,
+                            source_lang=backend_info.language,
+                            target_lang=self.translation_target_language or "en",
+                        )
+
                     seg_dict = {
-                        "text": segment.text,
+                        "text": text,
                         "start": segment.start,
                         "end": segment.end,
                     }
@@ -727,7 +751,7 @@ class AudioToTextRecorder:
                         all_words.extend(segment.words)
 
                     all_segments.append(seg_dict)
-                    full_text_parts.append(segment.text)
+                    full_text_parts.append(text)
 
                 full_text = " ".join(full_text_parts).strip()
                 full_text = self._preprocess_output(full_text)
@@ -910,12 +934,18 @@ class AudioToTextRecorder:
                     else self.translation_target_language
                 )
 
+                # If we have a dedicated translation engine, we force the STT backend
+                # to "transcribe" to get source-language text for the translator.
+                stt_task = effective_task
+                if self.translation_backend and effective_task == "translate":
+                    stt_task = "transcribe"
+
                 # Transcribe via backend
                 backend_segments, backend_info = self._backend.transcribe(
                     audio_data,
                     audio_sample_rate=sample_rate,
                     language=lang,
-                    task=effective_task,
+                    task=stt_task,
                     beam_size=self.beam_size,
                     initial_prompt=prompt,
                     suppress_tokens=self.suppress_tokens,
@@ -940,8 +970,16 @@ class AudioToTextRecorder:
                         logger.info("Transcription cancelled by user")
                         raise TranscriptionCancelledError("Transcription cancelled by user")
 
+                    text = segment.text.strip()
+                    if self.translation_backend and effective_task == "translate":
+                        text = self.translation_backend.translate(
+                            text,
+                            source_lang=backend_info.language,
+                            target_lang=effective_target,
+                        )
+
                     seg_dict = {
-                        "text": segment.text.strip(),
+                        "text": text,
                         "start": round(segment.start, 3),
                         "end": round(segment.end, 3),
                         "duration": round(segment.end - segment.start, 3),
@@ -960,7 +998,7 @@ class AudioToTextRecorder:
                         all_words.extend(seg_dict["words"])
 
                     all_segments.append(seg_dict)
-                    full_text_parts.append(segment.text.strip())
+                    full_text_parts.append(text)
 
                 full_text = " ".join(full_text_parts)
                 full_text = self._preprocess_output(full_text)

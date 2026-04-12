@@ -167,3 +167,59 @@ class STTBackend(abc.ABC):
     @abc.abstractmethod
     def backend_name(self) -> str:
         """Short identifier for this backend (e.g. ``"whisper"``, ``"parakeet"``)."""
+
+
+class TranslationBackend(abc.ABC):
+    """Abstract base class for dedicated translation backends."""
+
+    @abc.abstractmethod
+    def load(self, model_name: str, device: str, **kwargs: Any) -> None:
+        """Load the translation model.
+
+        Args:
+            model_name: Model identifier (HuggingFace repo or local path).
+            device: Target device ("cuda" or "cpu").
+            **kwargs: Backend-specific options.
+        """
+
+    @abc.abstractmethod
+    def unload(self) -> None:
+        """Unload the model and free resources."""
+
+    @abc.abstractmethod
+    def is_loaded(self) -> bool:
+        """Return True if the translation model is currently loaded."""
+
+    @abc.abstractmethod
+    def translate(
+        self,
+        text: str,
+        *,
+        source_lang: str | None = None,
+        target_lang: str = "en",
+        **kwargs: Any,
+    ) -> str:
+        """Translate text to the target language.
+
+        Args:
+            text: Input text to translate.
+            source_lang: Source language code (e.g. "fr", "zh").
+            target_lang: Target language code (e.g. "en").
+            **kwargs: Additional translation options.
+
+        Returns:
+            The translated text.
+        """
+
+    @abc.abstractmethod
+    def get_supported_languages(self) -> list[dict[str, str]]:
+        """Return a list of supported languages and their codes.
+
+        Returns:
+            List of objects with "code" and "name" keys.
+        """
+
+    @property
+    @abc.abstractmethod
+    def backend_name(self) -> str:
+        """Short identifier for this backend (e.g. ``"nllb"``)."""

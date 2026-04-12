@@ -18,6 +18,10 @@ from enum import Enum, auto
 from typing import Any
 
 import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from server.core.stt.backends.base import TranslationBackend
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,7 @@ class LiveModeEngine:
         on_realtime_update: Callable[[str], None] | None = None,
         on_state_change: Callable[[LiveModeState], None] | None = None,
         shared_backend: Any | None = None,
+        translation_backend: "TranslationBackend | None" = None,
     ):
         """
         Initialize the Live Mode engine.
@@ -99,6 +104,7 @@ class LiveModeEngine:
         self._on_realtime_update = on_realtime_update
         self._on_state_change = on_state_change
         self._shared_backend = shared_backend
+        self._translation_backend = translation_backend
 
         self._recorder: Any | None = None
         self._state = LiveModeState.STOPPED
@@ -197,6 +203,7 @@ class LiveModeEngine:
                 on_recording_start=self._on_recording_start,
                 on_recording_stop=self._on_recording_stop,
                 shared_backend=self._shared_backend,
+                translation_backend=self._translation_backend,
             )
 
             self._set_state(LiveModeState.LISTENING)

@@ -20,13 +20,14 @@ import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from server.config import resolve_main_transcriber_model
+from server.config import resolve_main_transcriber_model, resolve_translation_model
 
 # Type-only imports for hints (no runtime cost)
 if TYPE_CHECKING:
     from server.core.client_detector import ClientType
     from server.core.diarization_engine import DiarizationEngine
     from server.core.realtime_engine import RealtimeTranscriptionEngine
+    from server.core.stt.backends.base import TranslationBackend
     from server.core.stt.engine import AudioToTextRecorder
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,7 @@ class ModelManager:
 
         self.config = config
         self._transcription_engine: AudioToTextRecorder | None = None
+        self._translation_engine: TranslationBackend | None = None
         self._diarization_engine: Any | None = None  # Will be DiarizationEngine
         self._realtime_engines: dict[str, RealtimeTranscriptionEngine] = {}
         self._diarization_feature_available: bool = False
@@ -711,6 +713,7 @@ class ModelManager:
             translation_target_language=trans_opts.get("translation_target_language", "en"),
             faster_whisper_vad_filter=main_cfg.get("faster_whisper_vad_filter", True),
             initial_prompt=main_cfg.get("initial_prompt"),
+            translation_backend=self.translation_engine if resolve_translation_model(self.config) else None,
         )
 
     def load_transcription_model(
@@ -782,6 +785,51 @@ class ModelManager:
             self._diarization_engine = None
             clear_gpu_cache()
             logger.info("Diarization model unloaded")
+
+    # =========================================================================
+    # Dedicated Translation Model
+    # =========================================================================
+
+    @property
+    def translation_engine(self) -> "TranslationBackend":
+        """Get or create the translation backend."""
+        if self._translation_engine is None:
+            from server.core.stt.backends.factory import create_translation_backend
+
+            model_name = resolve_translation_model(self.config)
+            self._translation_engine = create_translation_backend(model_name)
+        return self._translation_engine
+
+    def load_translation_model(
+        self,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> None:
+        """Load the dedicated translation model."""
+
+        def report(msg: str) -> None:
+            logger.info(msg)
+            if progress_callback:
+                progress_callback(msg)
+
+        engine = self.translation_engine
+        if not engine.is_loaded():
+            model_name = resolve_translation_model(self.config)
+            report(f"Loading translation model: {model_name}...")
+            # NLLB models can be large, but they are not as varied as STT backends
+            # yet. We'll use standard load params for now.
+            engine.load(
+                model_name=model_name,
+                device="cuda" if self.gpu_available else "cpu",
+                gpu_device_index=self._gpu_device_index,
+            )
+            report("Translation model ready")
+
+    def unload_translation_model(self) -> None:
+        """Unload the translation model."""
+        if self._translation_engine is not None:
+            self._translation_engine.unload()
+            self._translation_engine = None
+            logger.info("Translation model unloaded")
 
     # =========================================================================
     # Backend Sharing (main ↔ live mode)
@@ -870,8 +918,15 @@ class ModelManager:
         logger.info(f"Creating realtime engine for session {session_id}")
 
         # Create the engine
+        translation_model = resolve_translation_model(self.config)
+        trans_backend = None
+        if translation_model:
+            self.load_translation_model()
+            trans_backend = self.translation_engine
+
         engine = create_realtime_engine(
             config=self.config,
+            translation_backend=trans_backend,
             **callbacks,
         )
 
@@ -914,6 +969,7 @@ class ModelManager:
 
         logger.info("Unloading all models...")
         self.unload_transcription_model()
+        self.unload_translation_model()
         self.unload_diarization_model()
         self.release_all_realtime_engines()
         clear_gpu_cache()
@@ -939,6 +995,11 @@ class ModelManager:
             },
             "diarization": {
                 "loaded": self._diarization_engine is not None,
+            },
+            "translation": {
+                "selected_model": resolve_translation_model(self.config),
+                "loaded": self._translation_engine is not None
+                and self._translation_engine.is_loaded(),
             },
             "realtime": {
                 "active_sessions": len(self._realtime_engines),
