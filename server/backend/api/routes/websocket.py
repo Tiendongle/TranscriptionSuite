@@ -461,7 +461,11 @@ class TranscriptionSession:
                 on_vad_start=lambda: schedule_coro(self._on_vad_start()),
                 on_vad_stop=lambda: schedule_coro(self._on_vad_stop()),
             )
-            self._realtime_engine.start_recording(language)
+            self._realtime_engine.start_recording(
+                language=language,
+                translation_enabled=self.translation_enabled,
+                translation_target_language=self.translation_target_language,
+            )
             logger.info(f"Recording started with VAD for {self.client_name}")
 
         else:

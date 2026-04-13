@@ -178,6 +178,7 @@ export interface StartContainerOptions {
   mainTranscriberModel?: string;
   liveTranscriberModel?: string;
   diarizationModel?: string;
+  translationModel?: string;
   whispercppModel?: string;
 }
 
@@ -1227,6 +1228,7 @@ async function startContainer(options: StartContainerOptions): Promise<string> {
     mainTranscriberModel,
     liveTranscriberModel,
     diarizationModel,
+    translationModel,
     whispercppModel,
   } = options;
 
@@ -1372,6 +1374,10 @@ async function startContainer(options: StartContainerOptions): Promise<string> {
   if (diarizationModel !== undefined) {
     composeEnv['DIARIZATION_MODEL'] = diarizationModel;
     envUpdates['DIARIZATION_MODEL'] = diarizationModel;
+  }
+  if (translationModel !== undefined) {
+    composeEnv['TRANSLATION_MODEL'] = translationModel;
+    envUpdates['TRANSLATION_MODEL'] = translationModel;
   }
 
   // Vulkan sidecar: set whisper-server URL based on networking mode and

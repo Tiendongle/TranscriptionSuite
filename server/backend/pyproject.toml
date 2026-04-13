@@ -49,13 +49,15 @@ dependencies = [
     "filelock>=3.25.0",
     "aiofiles>=24.1.0",
     "structlog>=25.5.0",
+    "transformers>=4.48.0",
+    "sacremoses",
 ]
 
 [project.optional-dependencies]
 whisper = [
     "faster-whisper>=1.2.1",
     "ctranslate2>=4.7.1",
-    "whisperx @ git+https://github.com/Ahelsamahy/whisperX.git@qwenasr-and-Forced-aligner",       # WhisperX: faster-whisper + wav2vec2 alignment + diarization
+    "whisperx @ git+https://github.com/Tiendongle/whisperX@qwenasr-and-Forced-aligner",       # WhisperX: faster-whisper + wav2vec2 alignment + diarization
 ]
 nemo = [
     "nemo_toolkit[asr]>=2.7.0",

@@ -26,6 +26,7 @@ from typing import Any
 
 APP_ROOT = Path("/app")
 PROJECT_DIR = APP_ROOT / "server"
+PYPROJECT_FILE = PROJECT_DIR / "pyproject.toml"
 LOCK_FILE = PROJECT_DIR / "uv.lock"
 DEFAULT_CONFIG_FILE = APP_ROOT / "config.yaml"
 USER_CONFIG_FILE = Path("/user-config/config.yaml")
@@ -216,6 +217,7 @@ def compute_dependency_fingerprint(
     hasher.update(f"extras={','.join(sorted(extras))}".encode())
     hasher.update(f"gpu_driver={gpu_driver}".encode())
 
+    update_hash_with_file(hasher, "pyproject", PYPROJECT_FILE)
     update_hash_with_file(hasher, "uv-lock", LOCK_FILE)
 
     return hasher.hexdigest()
@@ -243,8 +245,9 @@ def compute_structural_fingerprint(
 
 
 def compute_lock_fingerprint() -> str:
-    """Hash of uv.lock content only — changes here are ideal for incremental sync."""
+    """Hash of manifest contents (pyproject.toml, uv.lock) — changes here are ideal for incremental sync."""
     hasher = hashlib.sha256()
+    update_hash_with_file(hasher, "pyproject", PYPROJECT_FILE)
     update_hash_with_file(hasher, "uv-lock", LOCK_FILE)
     return hasher.hexdigest()
 
@@ -1457,7 +1460,7 @@ def main() -> int:
                         str(venv_python),
                         "faster-whisper>=1.2.1",
                         "ctranslate2>=4.6.2",
-                        "whisperx @ git+https://github.com/Ahelsamahy/whisperX.git@qwenasr-and-Forced-aligner",
+                        "whisperx @ git+https://github.com/Tiendongle/whisperX/tree/qwenasr-and-Forced-aligner",
                     ],
                     timeout_seconds=timeout_seconds,
                     env=build_uv_sync_env(

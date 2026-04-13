@@ -24,6 +24,7 @@ export interface MLXStartOptions {
   mainTranscriberModel?: string;
   liveTranscriberModel?: string;
   diarizationModel?: string;
+  translationModel?: string;
 }
 
 const MAX_LOG_LINES = 500;
@@ -94,6 +95,7 @@ export class MLXServerManager {
     if (opts.mainTranscriberModel) env.MAIN_TRANSCRIBER_MODEL = opts.mainTranscriberModel;
     if (opts.liveTranscriberModel) env.LIVE_TRANSCRIBER_MODEL = opts.liveTranscriberModel;
     if (opts.diarizationModel) env.DIARIZATION_MODEL = opts.diarizationModel;
+    if (opts.translationModel) env.TRANSLATION_MODEL = opts.translationModel;
 
     // Ensure required directories exist.
     for (const dir of [

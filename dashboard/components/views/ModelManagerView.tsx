@@ -9,6 +9,7 @@ import {
 } from '../../src/services/modelSelection';
 
 const DIARIZATION_DEFAULT_MODEL = 'pyannote/speaker-diarization-community-1';
+const TRANSLATION_DEFAULT_MODEL = 'Xenova/nllb-200-distilled-600M';
 const MLX_DEFAULT_MODEL = 'mlx-community/parakeet-tdt-0.6b-v3';
 
 export const ModelManagerView: React.FC = () => {
@@ -23,6 +24,9 @@ export const ModelManagerView: React.FC = () => {
   const [diarizationModelSelection, setDiarizationModelSelection] =
     useState(DIARIZATION_DEFAULT_MODEL);
   const [diarizationCustomModel, setDiarizationCustomModel] = useState('');
+  const [translationModelSelection, setTranslationModelSelection] =
+    useState(TRANSLATION_DEFAULT_MODEL);
+  const [translationCustomModel, setTranslationCustomModel] = useState('');
   const [runtimeProfile, setRuntimeProfile] = useState<string>('docker');
   const [hydrated, setHydrated] = useState(false);
 
@@ -46,10 +50,22 @@ export const ModelManagerView: React.FC = () => {
       api.config.get('server.liveCustomModel'),
       api.config.get('server.diarizationModelSelection'),
       api.config.get('server.diarizationCustomModel'),
+      api.config.get('server.translationModelSelection'),
+      api.config.get('server.translationCustomModel'),
       api.config.get('server.runtimeProfile'),
     ])
       .then(
-        ([main, mainCustom, live, liveCustom, diarization, diarizationCustom, rt]: unknown[]) => {
+        ([
+          main,
+          mainCustom,
+          live,
+          liveCustom,
+          diarization,
+          diarizationCustom,
+          translation,
+          translationCustom,
+          rt,
+        ]: unknown[]) => {
           if (!active) return;
           if (typeof main === 'string' && main.trim()) setMainModelSelection(main.trim());
           if (typeof mainCustom === 'string') setMainCustomModel(mainCustom.trim());
@@ -59,6 +75,10 @@ export const ModelManagerView: React.FC = () => {
             setDiarizationModelSelection(diarization.trim());
           if (typeof diarizationCustom === 'string')
             setDiarizationCustomModel(diarizationCustom.trim());
+          if (typeof translation === 'string' && translation.trim())
+            setTranslationModelSelection(translation.trim());
+          if (typeof translationCustom === 'string')
+            setTranslationCustomModel(translationCustom.trim());
           if (typeof rt === 'string' && rt.trim()) setRuntimeProfile(rt.trim());
         },
       )
@@ -123,6 +143,22 @@ export const ModelManagerView: React.FC = () => {
       ?.catch?.(() => {});
   }, [hydrated, diarizationCustomModel]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    const api = (window as any).electronAPI;
+    void api?.config
+      ?.set('server.translationModelSelection', translationModelSelection)
+      ?.catch?.(() => {});
+  }, [hydrated, translationModelSelection]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const api = (window as any).electronAPI;
+    void api?.config
+      ?.set('server.translationCustomModel', translationCustomModel)
+      ?.catch?.(() => {});
+  }, [hydrated, translationCustomModel]);
+
   const refreshCacheStatus = useCallback(
     (extraIds?: string[]) => {
       const api = (window as any).electronAPI;
@@ -162,6 +198,10 @@ export const ModelManagerView: React.FC = () => {
           setDiarizationModelSelection={setDiarizationModelSelection}
           diarizationCustomModel={diarizationCustomModel}
           setDiarizationCustomModel={setDiarizationCustomModel}
+          translationModelSelection={translationModelSelection}
+          setTranslationModelSelection={setTranslationModelSelection}
+          translationCustomModel={translationCustomModel}
+          setTranslationCustomModel={setTranslationCustomModel}
           modelCacheStatus={modelCacheStatus}
           isRunning={isRunning}
           refreshCacheStatus={refreshCacheStatus}

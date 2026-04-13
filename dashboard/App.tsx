@@ -354,6 +354,7 @@ const AppInner: React.FC = () => {
         mainTranscriberModel?: string;
         liveTranscriberModel?: string;
         diarizationModel?: string;
+        translationModel?: string;
         whispercppModel?: string;
       },
     ) => {
@@ -606,6 +607,7 @@ const AppInner: React.FC = () => {
             mainTranscriberModel: selectedMainModel,
             liveTranscriberModel: selectedLiveModel,
             ...(models?.diarizationModel ? { diarizationModel: models.diarizationModel } : {}),
+            ...(models?.translationModel ? { translationModel: models.translationModel } : {}),
             ...(models?.whispercppModel ? { whispercppModel: models.whispercppModel } : {}),
           },
         );

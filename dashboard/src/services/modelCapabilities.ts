@@ -13,6 +13,7 @@ const MLX_PARAKEET_PATTERN = /^mlx-community\/parakeet/i;
 const MLX_CANARY_PATTERN = /^[^/]+\/canary[^/]*-mlx/i;
 const MLX_PATTERN = /^mlx-community\//i;
 const QWEN_PATTERN = /^Qwen\//i;
+const NLLB_PATTERN = /^Xenova\/nllb-200/i;
 
 /**
  * The 25 European languages supported by NeMo ASR models
@@ -136,6 +137,21 @@ export function isQwenModel(modelName: string | null | undefined): boolean {
 }
 
 /**
+ * Returns true if the model is an NLLB translation-only model.
+ */
+export function isNLLBModel(modelName: string | null | undefined): boolean {
+  const name = (modelName ?? '').trim();
+  return NLLB_PATTERN.test(name);
+}
+
+/**
+ * Returns true if the model is a translation-only model (like NLLB).
+ */
+export function isTranslatorModel(modelName: string | null | undefined): boolean {
+  return isNLLBModel(modelName);
+}
+
+/**
  * Returns true if the model should run on the faster-whisper/Whisper backend.
  * Unknown or empty values are treated as Whisper-compatible defaults.
  */
@@ -253,6 +269,7 @@ export function supportsLiveMode(modelName: string | null | undefined): boolean 
     isWhisperModel(modelName) || 
     isNemoModel(modelName) || 
     isMLXModel(modelName) || 
-    isQwenModel(modelName)
+    isQwenModel(modelName) ||
+    isNLLBModel(modelName)
   );
 }

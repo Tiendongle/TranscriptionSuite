@@ -24,6 +24,7 @@ import {
   MAIN_MODEL_CUSTOM_OPTION,
   LIVE_MODEL_SAME_AS_MAIN_OPTION,
   LIVE_MODEL_CUSTOM_OPTION,
+  TRANSLATION_MODEL_CUSTOM_OPTION,
   MODEL_DISABLED_OPTION,
 } from '../../src/services/modelSelection';
 
@@ -35,7 +36,7 @@ const DIARIZATION_DEFAULT_MODEL = 'pyannote/speaker-diarization-community-1';
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Families that require Docker and do not work in Metal mode. */
-const DOCKER_ONLY_FAMILIES: Set<ModelFamily> = new Set(['nemo', 'vibevoice', 'whispercpp', 'qwen']);
+const DOCKER_ONLY_FAMILIES: Set<ModelFamily> = new Set(['nemo', 'vibevoice', 'whispercpp', 'qwen', 'translation']);
 
 export interface ModelManagerTabProps {
   mainModelSelection: string;
@@ -50,6 +51,10 @@ export interface ModelManagerTabProps {
   setDiarizationModelSelection: (value: string) => void;
   diarizationCustomModel: string;
   setDiarizationCustomModel: (value: string) => void;
+  translationModelSelection: string;
+  setTranslationModelSelection: (value: string) => void;
+  translationCustomModel: string;
+  setTranslationCustomModel: (value: string) => void;
   modelCacheStatus: Record<string, { exists: boolean; size?: string }>;
   isRunning: boolean;
   refreshCacheStatus: (extraIds?: string[]) => void;
@@ -111,11 +116,11 @@ const FAMILY_SECTIONS: FamilySectionConfig[] = [
     headerTextClass: 'text-rose-400',
   },
   {
-    family: 'diarization',
-    label: 'Diarization',
-    borderClass: 'border-l-accent-magenta',
-    badgeClass: 'bg-accent-magenta/10 text-accent-magenta',
-    headerTextClass: 'text-accent-magenta',
+    family: 'translation',
+    label: 'Translation (NLLB)',
+    borderClass: 'border-l-indigo-400',
+    badgeClass: 'bg-indigo-500/10 text-indigo-400',
+    headerTextClass: 'text-indigo-400',
   },
 ];
 
@@ -141,6 +146,7 @@ interface ModelRowProps {
   isActiveMain: boolean;
   isActiveLive: boolean;
   isActiveDiarization: boolean;
+  isActiveTranslator: boolean;
   onDownload: (id: string) => void;
   onRemove: (id: string) => void;
   onSelectAs: (id: string, role: ModelRole) => void;
@@ -155,6 +161,7 @@ function ModelRow({
   isActiveMain,
   isActiveLive,
   isActiveDiarization,
+  isActiveTranslator,
   onDownload,
   onRemove,
   onSelectAs,
@@ -187,6 +194,8 @@ function ModelRow({
         return { role: r as ModelRole, label: 'Live Model' };
       case 'diarization':
         return { role: r as ModelRole, label: 'Diarization Model' };
+      case 'translator':
+        return { role: r as ModelRole, label: 'Translation Model' };
     }
   });
 
@@ -194,6 +203,7 @@ function ModelRow({
   if (isActiveMain) activeBadges.push('Main');
   if (isActiveLive) activeBadges.push('Live');
   if (isActiveDiarization) activeBadges.push('Diarization');
+  if (isActiveTranslator) activeBadges.push('Translation');
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition-colors duration-200 hover:bg-white/10">
@@ -336,6 +346,7 @@ interface CustomModelRowProps {
   isActiveMain: boolean;
   isActiveLive: boolean;
   isActiveDiarization: boolean;
+  isActiveTranslator: boolean;
   onDownload: (id: string) => void;
   onRemove: (id: string) => void;
   onSelectAs: (id: string, role: ModelRole) => void;
@@ -351,6 +362,7 @@ function CustomModelRow({
   isActiveMain,
   isActiveLive,
   isActiveDiarization,
+  isActiveTranslator,
   onDownload,
   onRemove,
   onSelectAs,
@@ -374,11 +386,14 @@ function CustomModelRow({
   if (isActiveMain) activeBadges.push('Main');
   if (isActiveLive) activeBadges.push('Live');
   if (isActiveDiarization) activeBadges.push('Diarization');
+  if (isActiveTranslator) activeBadges.push('Translation');
+
 
   const roleOptions: { role: ModelRole; label: string }[] = [
     { role: 'main', label: 'Main Transcriber' },
     ...(supportsLiveMode(modelId) ? [{ role: 'live' as ModelRole, label: 'Live Model' }] : []),
     { role: 'diarization', label: 'Diarization Model' },
+    { role: 'translator', label: 'Translation Model' },
   ];
 
   return (
@@ -494,6 +509,10 @@ export const ModelManagerTab: React.FC<ModelManagerTabProps> = ({
   setDiarizationModelSelection,
   diarizationCustomModel,
   setDiarizationCustomModel,
+  translationModelSelection,
+  setTranslationModelSelection,
+  translationCustomModel,
+  setTranslationCustomModel,
   modelCacheStatus,
   isRunning,
   refreshCacheStatus,
@@ -636,6 +655,16 @@ export const ModelManagerTab: React.FC<ModelManagerTabProps> = ({
           }
           showToast(`Set ${modelId} as Diarization Model`);
           break;
+        case 'translator':
+          if (isPreset) {
+            setTranslationModelSelection(modelId);
+            setTranslationCustomModel('');
+          } else {
+            setTranslationModelSelection(TRANSLATION_MODEL_CUSTOM_OPTION);
+            setTranslationCustomModel(modelId);
+          }
+          showToast(`Set ${modelId} as Translation Model`);
+          break;
       }
     },
     [
@@ -645,6 +674,8 @@ export const ModelManagerTab: React.FC<ModelManagerTabProps> = ({
       setLiveCustomModel,
       setDiarizationModelSelection,
       setDiarizationCustomModel,
+      setTranslationModelSelection,
+      setTranslationCustomModel,
       showToast,
     ],
   );
@@ -748,6 +779,7 @@ export const ModelManagerTab: React.FC<ModelManagerTabProps> = ({
                   isActiveMain={activeMain.toLowerCase() === model.id.toLowerCase()}
                   isActiveLive={activeLive.toLowerCase() === model.id.toLowerCase()}
                   isActiveDiarization={activeDiarization.toLowerCase() === model.id.toLowerCase()}
+                  isActiveTranslator={translationModelSelection.toLowerCase() === model.id.toLowerCase()}
                   onDownload={handleDownload}
                   onRemove={handleRemove}
                   onSelectAs={handleSelectAs}
@@ -813,6 +845,9 @@ export const ModelManagerTab: React.FC<ModelManagerTabProps> = ({
                     isActiveMain={activeMain.toLowerCase() === id.toLowerCase()}
                     isActiveLive={activeLive.toLowerCase() === id.toLowerCase()}
                     isActiveDiarization={activeDiarization.toLowerCase() === id.toLowerCase()}
+                    isActiveTranslator={translationModelSelection === TRANSLATION_MODEL_CUSTOM_OPTION 
+                        ? translationCustomModel.toLowerCase() === id.toLowerCase()
+                        : translationModelSelection.toLowerCase() === id.toLowerCase()}
                     onDownload={handleDownload}
                     onRemove={handleRemove}
                     onSelectAs={handleSelectAs}

@@ -24,6 +24,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 FALLBACK_MAIN_TRANSCRIBER_MODEL = "Systran/faster-whisper-large-v3"
+FALLBACK_TRANSLATION_MODEL = "Xenova/nllb-200-distilled-600M"
 DISABLED_MODEL_SENTINEL = "__none__"
 
 
@@ -190,6 +191,7 @@ class ServerConfig:
     _ENV_MODEL_OVERRIDES = (
         ("MAIN_TRANSCRIBER_MODEL", ("main_transcriber", "model")),
         ("LIVE_TRANSCRIBER_MODEL", ("live_transcriber", "model")),
+        ("TRANSLATION_MODEL", ("translation", "model")),
         ("DIARIZATION_MODEL", ("diarization", "model")),
         ("WHISPERCPP_SERVER_URL", ("whisper_cpp", "server_url")),
     )
@@ -453,6 +455,21 @@ def resolve_live_transcriber_model(config: ServerConfig | dict[str, Any]) -> str
         return ""
 
     return live_model or legacy_live_model or resolve_main_transcriber_model(config)
+
+
+def resolve_translation_model(config: ServerConfig | dict[str, Any]) -> str:
+    """
+    Resolve the dedicated translation model from config.
+    """
+    if isinstance(config, ServerConfig):
+        model = _non_empty_string(config.get("translation", "model"))
+    else:
+        model = _non_empty_string(_dict_get(config, "translation", "model"))
+
+    if is_disabled_model_value(model):
+        return ""
+
+    return model or FALLBACK_TRANSLATION_MODEL
 
 
 # Global config instance

@@ -7,7 +7,7 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from server.core.stt.backends.base import STTBackend
+    from server.core.stt.backends.base import STTBackend, TranslationBackend
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,8 @@ _MLX_VIBEVOICE_PATTERN = re.compile(r"^mlx-community/vibevoice-asr", re.IGNORECA
 _MLX_PATTERN = re.compile(r"^mlx-community/", re.IGNORECASE)
 # Matches Qwen models
 _QWEN_PATTERN = re.compile(r"^Qwen/", re.IGNORECASE)
+# Matches NLLB models
+_NLLB_PATTERN = re.compile(r"^([^/]+/)?nllb-200", re.IGNORECASE)
 
 
 def _looks_like_whispercpp(name: str) -> bool:
@@ -48,7 +50,6 @@ def _looks_like_whispercpp(name: str) -> bool:
         return False
     basename = parts[-1] if parts else normalised
     return bool(_WHISPERCPP_BASENAME_RE.match(basename))
-
 
 def detect_backend_type(model_name: str) -> str:
     """Return backend type based on the model name."""
@@ -186,3 +187,26 @@ def create_backend(model_name: str) -> STTBackend:
     from server.core.stt.backends.whisperx_backend import WhisperXBackend
 
     return WhisperXBackend()
+
+
+def detect_translation_backend_type(model_name: str) -> str:
+    """Return translation backend type based on the model name."""
+    name = model_name.strip()
+    if _NLLB_PATTERN.match(name):
+        return "nllb"
+    return "unknown"
+
+
+def create_translation_backend(model_name: str) -> TranslationBackend:
+    """Instantiate the appropriate TranslationBackend for *model_name*."""
+    backend_type = detect_translation_backend_type(model_name)
+    logger.info(
+        f"Translation Factory: Creating backend '{backend_type}' for model '{model_name}'"
+    )
+
+    if backend_type == "nllb":
+        from server.core.stt.backends.nllb_backend import NLLBBackend
+
+        return NLLBBackend()
+
+    raise ValueError(f"Unsupported translation backend type: {backend_type}")

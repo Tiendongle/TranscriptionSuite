@@ -57,7 +57,7 @@ from server.api.routes import (  # noqa: E402
 
 _log_time("routes imported")
 
-from server.config import get_config, resolve_main_transcriber_model  # noqa: E402
+from server.config import get_config, resolve_main_transcriber_model, resolve_translation_model  # noqa: E402
 
 _log_time("config imported")
 
@@ -549,6 +549,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 raise
         else:
             _log_time("model preload complete")
+ 
+        # Preload translation model if configured (Wave 4)
+        selected_translation_model = resolve_translation_model(config)
+        if selected_translation_model and not gpu_unrecoverable:
+            logger.info("Loading translation model from cache...")
+            _log_time("starting translation model preload...")
+            try:
+                manager.load_translation_model()
+                _log_time("translation model preload complete")
+            except Exception as e:
+                logger.warning(f"Translation model preload failed (non-fatal): {e}")
+                _log_time("translation model preload failed")
 
     # Store config in app state
     app.state.config = config

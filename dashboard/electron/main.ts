@@ -432,6 +432,8 @@ const store = new Store({
     'server.liveCustomModel': '',
     'server.diarizationModelSelection': 'pyannote/speaker-diarization-community-1',
     'server.diarizationCustomModel': '',
+    'server.translationModelSelection': 'Xenova/nllb-200-distilled-600M',
+    'server.translationCustomModel': '',
     'shortcuts.startRecording': 'Alt+Ctrl+Z',
     'shortcuts.stopTranscribe': 'Alt+Ctrl+X',
     'app.pasteAtCursor': false,
@@ -1811,6 +1813,9 @@ app.whenReady().then(() => {
     // Resolve live transcriber model from stored selection sentinels.
     const LIVE_SAME_AS_MAIN = 'Same as Main Transcriber';
     const LIVE_CUSTOM = 'Custom (HuggingFace repo)';
+    const TRANSLATION_CUSTOM = 'Custom (HuggingFace repo)';
+    const TRANSLATION_DISABLED = 'None (Disabled)';
+
     const liveModelSelection = (store.get('server.liveModelSelection') as string) || '';
     const liveCustomModel = (store.get('server.liveCustomModel') as string) || '';
     let resolvedLiveModel: string;
@@ -1828,6 +1833,20 @@ app.whenReady().then(() => {
       resolvedLiveModel = 'Systran/faster-whisper-medium';
     }
 
+    const translationModelSelection = (store.get('server.translationModelSelection') as string) || '';
+    const translationCustomModel = (store.get('server.translationCustomModel') as string) || '';
+    let resolvedTranslationModel: string;
+    if (
+      translationModelSelection === TRANSLATION_DISABLED ||
+      translationModelSelection === '__none__'
+    ) {
+      resolvedTranslationModel = '';
+    } else if (translationModelSelection === TRANSLATION_CUSTOM) {
+      resolvedTranslationModel = translationCustomModel || '';
+    } else {
+      resolvedTranslationModel = translationModelSelection;
+    }
+
     const diarizationModel = (store.get('server.diarizationModelSelection') as string) || undefined;
 
     mlxServerManager
@@ -1837,6 +1856,7 @@ app.whenReady().then(() => {
         mainTranscriberModel,
         liveTranscriberModel: resolvedLiveModel || undefined,
         diarizationModel: diarizationModel || undefined,
+        translationModel: resolvedTranslationModel || undefined,
       })
       .catch((err: unknown) => console.warn('[MLX] Auto-start failed:', err));
   }

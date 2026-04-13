@@ -2043,26 +2043,42 @@ export const SessionView: React.FC<SessionViewProps> = ({
                               </div>
                             )}
                             {live.sentences.map((s, i) => (
-                              <div key={i} className="mb-2">
-                                {!hideTimestamps && (
-                                  <span className="mr-2 text-slate-500 select-none">
-                                    {new Date(s.timestamp).toLocaleTimeString('en-US', {
-                                      hour12: false,
-                                    })}
-                                  </span>
-                                )}
-                                <span>{s.text}</span>
+                              <div key={i} className="mb-6 last:mb-2">
+                                <div className="flex items-start">
+                                  {!hideTimestamps && (
+                                    <span className="mt-0.5 mr-3 shrink-0 text-[10px] text-slate-500 select-none tabular-nums">
+                                      {new Date(s.timestamp).toLocaleTimeString('en-US', {
+                                        hour12: false,
+                                      })}
+                                    </span>
+                                  )}
+                                  <div className="flex flex-col gap-1">
+                                    {/* Primary text (Translation if available, else Transcription) */}
+                                    <div className="text-white">
+                                      {s.text}
+                                    </div>
+                                    
+                                    {/* Secondary source text (Original transcription) */}
+                                    {s.sourceText && s.sourceText !== s.text && (
+                                      <div className="text-xs italic text-slate-500/80">
+                                        {s.sourceText}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             ))}
                             {live.partial && (
-                              <div className="mb-2 opacity-60">
+                              <div className="mb-2 flex items-start opacity-60">
                                 {!hideTimestamps && (
-                                  <span className="mr-2 text-slate-500 select-none">
+                                  <span className="mt-0.5 mr-3 shrink-0 text-[10px] text-slate-500 select-none tabular-nums">
                                     {new Date().toLocaleTimeString('en-US', { hour12: false })}
                                   </span>
                                 )}
-                                <span className="italic">{live.partial}</span>
-                                <span className="bg-accent-cyan ml-0.5 inline-block h-4 w-1.5 animate-pulse align-text-bottom"></span>
+                                <div>
+                                  <span className="italic">{live.partial}</span>
+                                  <span className="bg-accent-cyan ml-1 inline-block h-4 w-1.5 animate-pulse align-text-bottom"></span>
+                                </div>
                               </div>
                             )}
                             {live.sentences.length === 0 &&

@@ -12,12 +12,15 @@ export type { ModelFamily, ModelRole };
 export const MAIN_RECOMMENDED_MODEL = 'nvidia/parakeet-tdt-0.6b-v3';
 export const LIVE_RECOMMENDED_MODEL = 'Systran/faster-whisper-medium';
 export const VULKAN_RECOMMENDED_MODEL = 'ggml-large-v3-turbo-q8_0.bin';
+export const TRANSLATION_RECOMMENDED_MODEL = 'Xenova/nllb-200-distilled-600M';
 export const DISABLED_MODEL_SENTINEL = '__none__';
 
 export const MODEL_DEFAULT_LOADING_PLACEHOLDER = 'Loading server default...';
 export const MAIN_MODEL_CUSTOM_OPTION = 'Custom (HuggingFace repo)';
 export const LIVE_MODEL_SAME_AS_MAIN_OPTION = 'Same as Main Transcriber';
 export const LIVE_MODEL_CUSTOM_OPTION = 'Custom (HuggingFace repo)';
+export const TRANSLATION_MODEL_CUSTOM_OPTION = 'Custom (HuggingFace repo)';
+export const TRANSLATION_MODEL_DISABLED_OPTION = 'None (Disabled)';
 export const MODEL_DISABLED_OPTION = 'None (Disabled)';
 
 export const WHISPER_LARGE_V3 = 'Systran/faster-whisper-large-v3';
@@ -52,6 +55,10 @@ export const MAIN_MODEL_PRESETS: string[] = MODEL_REGISTRY.filter((m) =>
 
 export const LIVE_MODEL_PRESETS: string[] = MODEL_REGISTRY.filter((m) =>
   m.roles.includes('live'),
+).map((m) => m.id);
+
+export const TRANSLATION_MODEL_PRESETS: string[] = MODEL_REGISTRY.filter((m) =>
+  m.roles.includes('translator'),
 ).map((m) => m.id);
 
 export const ONBOARDING_MAIN_MODEL_OPTIONS: string[] = [
@@ -170,6 +177,20 @@ export function resolveLiveModelSelectionValue(
     return liveCustomModel.trim() || configuredLiveModel || resolvedMainModel;
   }
   return liveSelection;
+}
+
+export function resolveTranslationModelSelectionValue(
+  translationSelection: string,
+  translationCustomModel: string,
+  configuredTranslationModel: string,
+): string {
+  if (translationSelection === TRANSLATION_MODEL_DISABLED_OPTION) {
+    return DISABLED_MODEL_SENTINEL;
+  }
+  if (translationSelection === TRANSLATION_MODEL_CUSTOM_OPTION) {
+    return translationCustomModel.trim() || configuredTranslationModel;
+  }
+  return translationSelection;
 }
 
 export function computeRequiredModelFamilies(
