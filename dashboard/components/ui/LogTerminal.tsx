@@ -14,6 +14,11 @@ interface LogTerminalProps {
   color?: 'cyan' | 'magenta' | 'orange';
 }
 
+// Cap the number of rendered rows to keep the GPU compositor within budget.
+// Rendering 2,000 rows with hover transitions in one paint overflows Chromium's
+// command buffer and triggers "GPU state invalid after WaitForGetOffsetInRange".
+const MAX_VISIBLE_LINES = 200;
+
 export const LogTerminal: React.FC<LogTerminalProps> = ({
   title,
   logs,
@@ -22,6 +27,10 @@ export const LogTerminal: React.FC<LogTerminalProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+
+  // Show only the most recent MAX_VISIBLE_LINES entries
+  const visibleLogs = logs.length > MAX_VISIBLE_LINES ? logs.slice(-MAX_VISIBLE_LINES) : logs;
+  const hiddenCount = logs.length - visibleLogs.length;
 
   // Pause auto-scroll when the user scrolls inside the terminal body
   const handleWheel = useCallback(() => {
@@ -68,14 +77,19 @@ export const LogTerminal: React.FC<LogTerminalProps> = ({
         </div>
       </div>
 
-      {/* Terminal Body - Added selectable-text class */}
+      {/* Terminal Body */}
       <div
         ref={scrollRef}
         onWheel={handleWheel}
         onMouseLeave={handleMouseLeave}
         className="custom-scrollbar selectable-text flex-1 space-y-1.5 overflow-y-auto p-4 font-mono text-xs"
       >
-        {logs.map((log, index) => (
+        {hiddenCount > 0 && (
+          <div className="text-slate-600 italic select-none mb-2">
+            ↑ {hiddenCount} earlier {hiddenCount === 1 ? 'entry' : 'entries'} not shown
+          </div>
+        )}
+        {visibleLogs.map((log, index) => (
           <div key={index} className="flex gap-3 rounded p-0.5 transition-colors hover:bg-white/5">
             <span className="shrink-0 text-slate-600 select-none">{log.timestamp}</span>
             <span
