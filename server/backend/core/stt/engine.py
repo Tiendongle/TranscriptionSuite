@@ -47,6 +47,25 @@ SAMPLE_RATE = 16000
 logger = logging.getLogger(__name__)
 
 
+def _model_not_loaded_message(model_name: str | None) -> str:
+    """Return the actionable error surfaced when no backend is attached.
+
+    The previous bare ``"STT model is not loaded"`` left users guessing
+    whether the download was still in progress, whether the sidecar crashed,
+    or whether they needed to click a button. This message names the
+    configured model and points at the concrete recovery steps.
+    """
+    model_repr = repr(model_name) if model_name else "<unset>"
+    return (
+        f"STT model is not loaded (configured: {model_repr}). "
+        "The server has not finished attaching the transcription backend. "
+        "If the model is still downloading, wait for it to finish and retry. "
+        "Otherwise open Settings → Models, confirm a model is selected and "
+        "downloaded, and click 'Reload Model'. For whisper.cpp (Vulkan) "
+        "models, also confirm the whisper-server sidecar container is running."
+    )
+
+
 @dataclass
 class TranscriptionResult:
     """Result of a transcription operation."""
@@ -375,6 +394,11 @@ class AudioToTextRecorder:
         if shared_backend is not None:
             self._backend = shared_backend
             self._model_loaded = True
+            # Apply this recorder's whisper_decode options to the shared backend
+            # too. Currently a no-op when main/live read the same config key, but
+            # keeps per-instance initialization symmetrical with _load_model() and
+            # future-proofs against config split (e.g. a live_transcriber.whisper_decode).
+            self._apply_decode_options(shared_backend)
             logger.info(
                 f"AudioToTextRecorder '{instance_name}' using shared backend "
                 f"(model={self.model_name})"
@@ -387,6 +411,20 @@ class AudioToTextRecorder:
         self.recording_thread.start()
 
         logger.info(f"AudioToTextRecorder '{instance_name}' initialized")
+
+    def _apply_decode_options(self, backend: Any) -> None:
+        """Apply configured whisper_decode options to *backend* if any are set.
+
+        Called from both _load_model() (owned backend) and __init__'s
+        shared-backend branch, so decode options (no_speech_threshold,
+        compression_ratio_threshold, hallucination_silence_threshold, etc.)
+        reach the backend regardless of whether this recorder owns it.
+
+        For non-Whisper backends (NeMo, Parakeet, Canary) the base class's
+        default configure_decode_options is a no-op, so this call is safe.
+        """
+        if self.whisper_decode:
+            backend.configure_decode_options(self.whisper_decode)
 
     def _load_model(self) -> None:
         """Load the STT model via the appropriate backend."""
@@ -412,8 +450,7 @@ class AudioToTextRecorder:
             )
 
             # Pass extra decode options (e.g. no_speech_threshold) to Whisper-family backends.
-            if self.whisper_decode:
-                backend.configure_decode_options(self.whisper_decode)
+            self._apply_decode_options(backend)
 
             # Fix 4: Use background warmup for NeMo models to reduce startup blocking
             backend_name = backend.backend_name
@@ -657,7 +694,7 @@ class AudioToTextRecorder:
                 start_time = time.time()
 
                 if self._backend is None:
-                    raise RuntimeError("STT model is not loaded")
+                    raise RuntimeError(_model_not_loaded_message(self.model_name))
 
                 # Transcribe via backend
                 backend_segments, backend_info = self._backend.transcribe(
@@ -864,7 +901,7 @@ class AudioToTextRecorder:
                 start_time = time.time()
 
                 if self._backend is None:
-                    raise RuntimeError("STT model is not loaded")
+                    raise RuntimeError(_model_not_loaded_message(self.model_name))
 
                 effective_target = (
                     translation_target_language

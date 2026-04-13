@@ -21,6 +21,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from server.core.model_manager import TranscriptionCancelledError
+
 if TYPE_CHECKING:
     from server.core.stt.engine import AudioToTextRecorder, TranscriptionResult
 
@@ -38,13 +40,22 @@ MAX_CHANNELS: int = 16  # Safety cap to prevent unbounded serial probing
 # ---------------------------------------------------------------------------
 
 
-def probe_channels(file_path: str) -> dict[str, Any]:
+def probe_channels(
+    file_path: str,
+    cancellation_check: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
     """Probe an audio file for channel count and per-channel mean volume.
 
     Returns:
         ``{"num_channels": int, "channel_levels_db": [float, ...]}``
         where each level is the mean volume in dBFS for that channel index.
         A completely silent channel reads as -91.0 (ffmpeg floor).
+
+    If *cancellation_check* is provided, it is invoked at the top of each
+    iteration of the volumedetect loop BEFORE launching ffmpeg. If it returns
+    True, TranscriptionCancelledError is raised and no partial dict is
+    returned. ffmpeg is not interrupted mid-run — worst-case wait is bounded
+    by a single channel's 120 s timeout. A broken check (raising) propagates.
     """
     # Step 1: get channel count from ffprobe
     try:
@@ -93,6 +104,11 @@ def probe_channels(file_path: str) -> dict[str, Any]:
     # Step 2: measure per-channel mean volume via volumedetect
     levels: list[float] = []
     for ch_idx in range(num_channels):
+        if cancellation_check is not None:
+            # A broken check (lock corruption, etc.) must propagate rather than
+            # silently finish the remaining channels.
+            if cancellation_check():
+                raise TranscriptionCancelledError("Transcription cancelled during channel probe")
         level = _measure_channel_volume(file_path, ch_idx)
         levels.append(level)
 
@@ -159,14 +175,43 @@ def split_channels(
     file_path: str,
     channel_indices: list[int],
     target_sample_rate: int = 16000,
+    cancellation_check: Callable[[], bool] | None = None,
 ) -> list[str]:
     """Extract each channel to a separate temp mono WAV file.
 
     Returns list of temp file paths (caller is responsible for cleanup).
     The order matches *channel_indices*.
+
+    If *cancellation_check* is provided, it is invoked at the top of each
+    channel iteration BEFORE launching ffmpeg. If it returns True, any
+    already-extracted temp files are unlinked and TranscriptionCancelledError
+    is raised. ffmpeg is not interrupted mid-run — the worst-case wait is
+    therefore bounded by a single channel's 300 s timeout.
     """
     temp_paths: list[str] = []
+
+    def _cleanup_partials() -> None:
+        for p in temp_paths:
+            try:
+                Path(p).unlink(missing_ok=True)
+            except OSError as _e:
+                # Best-effort cleanup — never let a cleanup failure mask the
+                # real cancellation or ffmpeg error that triggered us.
+                logger.warning("Failed to unlink partial channel file %s: %s", p, _e)
+        temp_paths.clear()
+
     for ch_idx in channel_indices:
+        if cancellation_check is not None:
+            try:
+                _cancelled = cancellation_check()
+            except Exception:
+                # A broken check must not leak already-extracted temp files.
+                _cleanup_partials()
+                raise
+            if _cancelled:
+                _cleanup_partials()
+                raise TranscriptionCancelledError("Transcription cancelled during channel split")
+
         tmp = tempfile.NamedTemporaryFile(
             delete=False,
             suffix=f"_ch{ch_idx}.wav",
@@ -197,9 +242,7 @@ def split_channels(
         except Exception as exc:
             # Clean up the file we just created on failure
             Path(tmp.name).unlink(missing_ok=True)
-            # Also clean up any previously created files
-            for p in temp_paths:
-                Path(p).unlink(missing_ok=True)
+            _cleanup_partials()
             raise RuntimeError(f"Failed to extract channel {ch_idx}: {exc}") from exc
 
     return temp_paths
@@ -288,7 +331,7 @@ def transcribe_multitrack(
     Falls through to standard single-file transcription for mono files.
     """
     logger.info("Multitrack: probing channels in %s", file_path)
-    probe = probe_channels(file_path)
+    probe = probe_channels(file_path, cancellation_check=cancellation_check)
     num_ch = probe["num_channels"]
 
     if num_ch <= 1:
@@ -321,7 +364,7 @@ def transcribe_multitrack(
     # Split active channels into separate mono files (even for a single active channel,
     # to avoid feeding a multi-channel file to the STT engine which would mix to mono
     # and potentially degrade quality with bleed from the silent channel)
-    channel_files = split_channels(file_path, active)
+    channel_files = split_channels(file_path, active, cancellation_check=cancellation_check)
     try:
         track_results: list[TranscriptionResult] = []
         total_tracks = len(channel_files)
@@ -334,6 +377,32 @@ def transcribe_multitrack(
                 active[track_idx],
             )
 
+            # Scale the per-track (current, total) progress into overall progress
+            # across all N tracks so the client sees a monotone 0 → N*total walk
+            # instead of the raw 0 → total resetting N times. Semantics-agnostic:
+            # works whether backends emit samples, seconds, or chunk counts.
+            # `_i=track_idx` captures the loop var by value — avoids the classic
+            # late-binding closure bug (all wrappers capturing the final idx).
+            track_progress_cb: Callable[[int, int], None] | None
+            if progress_callback is None:
+                track_progress_cb = None
+            else:
+                user_cb = progress_callback
+
+                def _scaled(
+                    current: int,
+                    total: int,
+                    _i: int = track_idx,
+                    _n: int = total_tracks,
+                    _cb: Callable[[int, int], None] = user_cb,
+                ) -> None:
+                    if total <= 0:
+                        _cb(current, total)
+                        return
+                    _cb(_i * total + current, _n * total)
+
+                track_progress_cb = _scaled
+
             result = engine.transcribe_file(
                 ch_file,
                 language=language,
@@ -341,7 +410,7 @@ def transcribe_multitrack(
                 translation_target_language=translation_target_language,
                 word_timestamps=True,
                 cancellation_check=cancellation_check,
-                progress_callback=progress_callback,
+                progress_callback=track_progress_cb,
             )
             track_results.append(result)
 

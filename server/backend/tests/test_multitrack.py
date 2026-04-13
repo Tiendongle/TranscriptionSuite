@@ -13,6 +13,8 @@ import json
 import subprocess
 import sys
 import types
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -186,6 +188,158 @@ class TestProbeChannels:
         assert result["num_channels"] == 0
 
 
+class TestProbeChannelsCancellation:
+    """cancellation_check between volumedetect calls — bounds worst-case
+    unresponsive wait to a single channel's 120 s timeout instead of
+    num_channels * 120 s (up to 32 min with MAX_CHANNELS=16)."""
+
+    @staticmethod
+    def _fake_run_factory(
+        ffprobe_stdout: str, volumedetect_calls: list[int]
+    ) -> Callable[..., subprocess.CompletedProcess[str]]:
+        """Build a side_effect that returns ffprobe JSON, then records each
+        volumedetect invocation by appending the channel index to the list."""
+
+        def _fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            if cmd[0] == "ffprobe":
+                return subprocess.CompletedProcess(cmd, 0, stdout=ffprobe_stdout, stderr="")
+            ch_idx_raw = cmd[cmd.index("-af") + 1]
+            ch_num = int(ch_idx_raw.split("c0=c")[1].split(",")[0])
+            volumedetect_calls.append(ch_num)
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="mean_volume: -20.0 dB")
+
+        return _fake_run
+
+    def test_cancellation_check_none_is_noop(self) -> None:
+        ffprobe_stdout = json.dumps({"streams": [{"channels": 3}]})
+        calls: list[int] = []
+
+        with patch(
+            "server.core.multitrack.subprocess.run",
+            side_effect=self._fake_run_factory(ffprobe_stdout, calls),
+        ):
+            result = probe_channels("/fake/f.wav", cancellation_check=None)
+
+        assert result["num_channels"] == 3
+        assert calls == [0, 1, 2]
+
+    def test_cancellation_check_false_is_noop(self) -> None:
+        ffprobe_stdout = json.dumps({"streams": [{"channels": 3}]})
+        calls: list[int] = []
+
+        with patch(
+            "server.core.multitrack.subprocess.run",
+            side_effect=self._fake_run_factory(ffprobe_stdout, calls),
+        ):
+            result = probe_channels("/fake/f.wav", cancellation_check=lambda: False)
+
+        assert result["num_channels"] == 3
+        assert calls == [0, 1, 2]
+
+    def test_cancelled_before_first_channel_raises_with_no_volumedetect(self) -> None:
+        from server.core.model_manager import TranscriptionCancelledError
+
+        ffprobe_stdout = json.dumps({"streams": [{"channels": 4}]})
+        calls: list[int] = []
+
+        with patch(
+            "server.core.multitrack.subprocess.run",
+            side_effect=self._fake_run_factory(ffprobe_stdout, calls),
+        ):
+            with pytest.raises(
+                TranscriptionCancelledError,
+                match="cancelled during channel probe",
+            ):
+                probe_channels("/fake/f.wav", cancellation_check=lambda: True)
+
+        # ffprobe still ran (it's before the loop) but no volumedetect fired.
+        assert calls == []
+
+    def test_cancelled_mid_loop_raises_after_one_volumedetect(self) -> None:
+        from server.core.model_manager import TranscriptionCancelledError
+
+        ffprobe_stdout = json.dumps({"streams": [{"channels": 3}]})
+        calls: list[int] = []
+
+        def _cancel_after_first() -> bool:
+            return len(calls) >= 1
+
+        with patch(
+            "server.core.multitrack.subprocess.run",
+            side_effect=self._fake_run_factory(ffprobe_stdout, calls),
+        ):
+            with pytest.raises(
+                TranscriptionCancelledError,
+                match="cancelled during channel probe",
+            ):
+                probe_channels("/fake/f.wav", cancellation_check=_cancel_after_first)
+
+        # Exactly one volumedetect completed before the check flipped True.
+        assert calls == [0]
+
+    def test_broken_cancellation_check_propagates(self) -> None:
+        ffprobe_stdout = json.dumps({"streams": [{"channels": 3}]})
+        calls: list[int] = []
+
+        def _broken() -> bool:
+            raise RuntimeError("cancellation registry corrupted")
+
+        with patch(
+            "server.core.multitrack.subprocess.run",
+            side_effect=self._fake_run_factory(ffprobe_stdout, calls),
+        ):
+            with pytest.raises(RuntimeError, match="cancellation registry"):
+                probe_channels("/fake/f.wav", cancellation_check=_broken)
+
+        # The check fired at the TOP of iteration 0, before any volumedetect.
+        assert calls == []
+
+    def test_mono_file_skips_cancellation_loop_entirely(self) -> None:
+        """Early-return on num_channels <= 1 — cancellation_check is irrelevant."""
+        ffprobe_stdout = json.dumps({"streams": [{"channels": 1}]})
+        invoked = {"n": 0}
+
+        def _track() -> bool:
+            invoked["n"] += 1
+            return True  # Would cancel if ever called.
+
+        with patch(
+            "server.core.multitrack.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, stdout=ffprobe_stdout, stderr=""),
+        ):
+            result = probe_channels("/fake/mono.wav", cancellation_check=_track)
+
+        assert result["num_channels"] == 1
+        assert result["channel_levels_db"] == []
+        assert invoked["n"] == 0  # The check was never called.
+
+    def test_transcribe_multitrack_threads_cancellation_into_probe(self) -> None:
+        """Call-site wiring: transcribe_multitrack's cancellation_check must
+        reach probe_channels as a kwarg (not silently dropped)."""
+
+        def sentinel() -> bool:
+            return False
+
+        captured_kwargs: dict[str, Any] = {}
+
+        def _spy_probe(file_path: str, **kwargs: Any) -> dict[str, Any]:
+            captured_kwargs.update(kwargs)
+            # Return mono so transcribe_multitrack early-exits via the engine stub.
+            return {"num_channels": 1, "channel_levels_db": []}
+
+        engine = MagicMock()
+        engine.transcribe_file.return_value = _make_result([])
+
+        with patch("server.core.multitrack.probe_channels", side_effect=_spy_probe):
+            transcribe_multitrack(
+                engine,
+                "/fake/f.wav",
+                cancellation_check=sentinel,
+            )
+
+        assert captured_kwargs.get("cancellation_check") is sentinel
+
+
 # ---------------------------------------------------------------------------
 # split_channels (mocked ffmpeg)
 # ---------------------------------------------------------------------------
@@ -221,6 +375,136 @@ class TestSplitChannels:
         with patch("server.core.multitrack.subprocess.run", side_effect=failing_run):
             with pytest.raises(RuntimeError, match="Failed to extract channel"):
                 split_channels(str(tmp_path / "input.wav"), [0, 1])
+
+    def test_cancellation_check_none_is_noop(self, tmp_path: Any) -> None:
+        """Explicit None (the default) must preserve pre-change behavior."""
+        with patch("server.core.multitrack.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess([], 0)
+            paths = split_channels(str(tmp_path / "input.wav"), [0, 1], cancellation_check=None)
+        assert len(paths) == 2
+        assert mock_run.call_count == 2
+
+    def test_cancellation_check_false_is_noop(self, tmp_path: Any) -> None:
+        with patch("server.core.multitrack.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess([], 0)
+            paths = split_channels(
+                str(tmp_path / "input.wav"),
+                [0, 1],
+                cancellation_check=lambda: False,
+            )
+        assert len(paths) == 2
+        assert mock_run.call_count == 2
+
+    def test_cancelled_before_first_channel_raises_with_no_files(self, tmp_path: Any) -> None:
+        """If cancellation is already set, ffmpeg must never be invoked and
+        no temp files must be created."""
+        from server.core.model_manager import TranscriptionCancelledError
+
+        with patch("server.core.multitrack.subprocess.run") as mock_run:
+            with pytest.raises(
+                TranscriptionCancelledError,
+                match="cancelled during channel split",
+            ):
+                split_channels(
+                    str(tmp_path / "input.wav"),
+                    [0, 1, 2],
+                    cancellation_check=lambda: True,
+                )
+        assert mock_run.call_count == 0
+
+    def test_cancelled_mid_loop_unlinks_partial_files(self, tmp_path: Any) -> None:
+        """A stateful cancellation_check that flips True after the first
+        iteration must cause the first temp file to be unlinked before the
+        TranscriptionCancelledError is raised."""
+        from server.core.model_manager import TranscriptionCancelledError
+
+        cancelled = {"value": False}
+        created_paths: list[str] = []
+
+        def _cancel_after_first() -> bool:
+            if len(created_paths) >= 1:
+                return True
+            return cancelled["value"]
+
+        def _record_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            # cmd[-1] is the output temp path
+            created_paths.append(cmd[-1])
+            # Touch the file so we can later assert it was unlinked.
+            Path(cmd[-1]).write_bytes(b"")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with patch("server.core.multitrack.subprocess.run", side_effect=_record_run):
+            with pytest.raises(
+                TranscriptionCancelledError,
+                match="cancelled during channel split",
+            ):
+                split_channels(
+                    str(tmp_path / "input.wav"),
+                    [0, 1, 2],
+                    cancellation_check=_cancel_after_first,
+                )
+
+        # ffmpeg ran exactly once (for channel 0); the check observed True on the
+        # top of iteration 2 and short-circuited before ffmpeg for channel 1.
+        assert len(created_paths) == 1
+        # And the one temp file we created must have been cleaned up.
+        assert not Path(created_paths[0]).exists()
+
+    def test_cancellation_check_raising_still_cleans_up_partials(self, tmp_path: Any) -> None:
+        """If the cancellation callback itself raises, already-extracted temp
+        files must be cleaned up before the exception propagates."""
+        created_paths: list[str] = []
+
+        def _record_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            created_paths.append(cmd[-1])
+            Path(cmd[-1]).write_bytes(b"")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        def _broken_check() -> bool:
+            if len(created_paths) >= 1:
+                raise RuntimeError("cancellation registry went away")
+            return False
+
+        with patch("server.core.multitrack.subprocess.run", side_effect=_record_run):
+            with pytest.raises(RuntimeError, match="cancellation registry"):
+                split_channels(
+                    str(tmp_path / "input.wav"),
+                    [0, 1, 2],
+                    cancellation_check=_broken_check,
+                )
+
+        assert len(created_paths) == 1
+        assert not Path(created_paths[0]).exists()
+
+    def test_cleanup_unlink_failure_does_not_mask_original_error(self, tmp_path: Any) -> None:
+        """A PermissionError during unlink must be logged and swallowed so the
+        real TranscriptionCancelledError reaches the caller."""
+        from server.core.model_manager import TranscriptionCancelledError
+
+        def _record_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            Path(cmd[-1]).write_bytes(b"")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        calls = {"n": 0}
+
+        def _cancel_after_first() -> bool:
+            calls["n"] += 1
+            return calls["n"] > 1  # False for iter 0, True for iter 1
+
+        with (
+            patch("server.core.multitrack.subprocess.run", side_effect=_record_run),
+            patch.object(
+                Path,
+                "unlink",
+                side_effect=PermissionError("read-only filesystem"),
+            ),
+        ):
+            with pytest.raises(TranscriptionCancelledError):
+                split_channels(
+                    str(tmp_path / "input.wav"),
+                    [0, 1, 2],
+                    cancellation_check=_cancel_after_first,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -439,3 +723,199 @@ class TestTranscribeMultitrack:
         assert result.words[0]["speaker"] == "Speaker 1"
         assert result.words[1]["speaker"] == "Speaker 2"
         assert engine.transcribe_file.call_count == 2
+
+
+class TestTranscribeMultitrackProgressScaling:
+    """The caller-supplied progress_callback must observe a monotone 0 → N*total
+    sequence across all tracks rather than N independent 0 → total walks."""
+
+    @staticmethod
+    def _engine_that_reports_progress(
+        reports: list[tuple[int, int]], track_results: list[Any]
+    ) -> MagicMock:
+        """Build an engine stub whose transcribe_file fires each tuple in
+        `reports` into the passed-in progress_callback, then returns one of
+        `track_results` (popped FIFO)."""
+        engine = MagicMock()
+        results_iter = iter(track_results)
+
+        def _fake_transcribe(_file, **kwargs: Any) -> Any:
+            cb = kwargs.get("progress_callback")
+            if cb is not None:
+                for current, total in reports:
+                    cb(current, total)
+            return next(results_iter)
+
+        engine.transcribe_file.side_effect = _fake_transcribe
+        return engine
+
+    def test_outer_callback_observes_monotone_rescaled_progress(self) -> None:
+        # 3 tracks, each reports (0, 100) then (100, 100).
+        # Expected outer calls, in order:
+        #   track 0: (0*100 + 0, 3*100)=(0,300),   (0*100 + 100, 300)=(100,300)
+        #   track 1: (1*100 + 0, 300)=(100,300),   (1*100 + 100, 300)=(200,300)
+        #   track 2: (2*100 + 0, 300)=(200,300),   (2*100 + 100, 300)=(300,300)
+        outer_calls: list[tuple[int, int]] = []
+        engine = self._engine_that_reports_progress(
+            reports=[(0, 100), (100, 100)],
+            track_results=[
+                _make_result([{"word": f"t{i}", "start": 0.0, "end": 0.1}]) for i in range(3)
+            ],
+        )
+
+        with (
+            patch(
+                "server.core.multitrack.probe_channels",
+                return_value={"num_channels": 3, "channel_levels_db": [-20.0, -20.0, -20.0]},
+            ),
+            patch(
+                "server.core.multitrack.split_channels",
+                return_value=["/tmp/ch0.wav", "/tmp/ch1.wav", "/tmp/ch2.wav"],
+            ),
+            patch("server.core.multitrack.Path"),
+        ):
+            transcribe_multitrack(
+                engine,
+                "/fake/three_ch.wav",
+                progress_callback=lambda c, t: outer_calls.append((c, t)),
+            )
+
+        assert outer_calls == [
+            (0, 300),
+            (100, 300),
+            (100, 300),
+            (200, 300),
+            (200, 300),
+            (300, 300),
+        ]
+        # Final value is exactly N * per_track_total.
+        assert outer_calls[-1] == (300, 300)
+
+    def test_none_progress_callback_is_forwarded_as_none(self) -> None:
+        engine = MagicMock()
+        engine.transcribe_file.return_value = _make_result([])
+
+        with (
+            patch(
+                "server.core.multitrack.probe_channels",
+                return_value={"num_channels": 2, "channel_levels_db": [-20.0, -20.0]},
+            ),
+            patch(
+                "server.core.multitrack.split_channels",
+                return_value=["/tmp/ch0.wav", "/tmp/ch1.wav"],
+            ),
+            patch("server.core.multitrack.Path"),
+        ):
+            transcribe_multitrack(engine, "/fake/two_ch.wav", progress_callback=None)
+
+        # Each per-track call must pass progress_callback=None, not a wrapper.
+        for call in engine.transcribe_file.call_args_list:
+            assert call.kwargs["progress_callback"] is None
+
+    def test_single_active_channel_scales_one_of_one(self) -> None:
+        outer_calls: list[tuple[int, int]] = []
+        engine = self._engine_that_reports_progress(
+            reports=[(50, 100), (100, 100)],
+            track_results=[_make_result([])],
+        )
+
+        with (
+            patch(
+                "server.core.multitrack.probe_channels",
+                return_value={"num_channels": 4, "channel_levels_db": [-91.0, -20.0, -91.0, -91.0]},
+            ),
+            patch(
+                "server.core.multitrack.split_channels",
+                return_value=["/tmp/ch1.wav"],
+            ),
+            patch("server.core.multitrack.Path"),
+        ):
+            transcribe_multitrack(
+                engine,
+                "/fake/one_active.wav",
+                progress_callback=lambda c, t: outer_calls.append((c, t)),
+            )
+
+        # With one active track, scaling is effectively identity:
+        # (0*100 + 50, 1*100) = (50, 100), then (0*100 + 100, 100) = (100, 100).
+        assert outer_calls == [(50, 100), (100, 100)]
+
+    def test_zero_total_passes_through_unchanged(self) -> None:
+        """Backends occasionally emit (0, 0) as a first heartbeat; the wrapper
+        must not divide by zero nor scale it — forward it verbatim."""
+        outer_calls: list[tuple[int, int]] = []
+        engine = self._engine_that_reports_progress(
+            reports=[(0, 0), (42, 100)],  # bad heartbeat then a normal report
+            track_results=[_make_result([]), _make_result([])],
+        )
+
+        with (
+            patch(
+                "server.core.multitrack.probe_channels",
+                return_value={"num_channels": 2, "channel_levels_db": [-20.0, -20.0]},
+            ),
+            patch(
+                "server.core.multitrack.split_channels",
+                return_value=["/tmp/ch0.wav", "/tmp/ch1.wav"],
+            ),
+            patch("server.core.multitrack.Path"),
+        ):
+            transcribe_multitrack(
+                engine,
+                "/fake/two_ch.wav",
+                progress_callback=lambda c, t: outer_calls.append((c, t)),
+            )
+
+        # First tuple of each track is (0, 0) — forwarded unchanged (no scale);
+        # second tuple is the normal scaled report.
+        assert outer_calls[0] == (0, 0)  # track 0 first report, pass-through
+        assert outer_calls[1] == (0 * 100 + 42, 2 * 100)  # track 0 scaled
+        assert outer_calls[2] == (0, 0)  # track 1 first report, pass-through
+        assert outer_calls[3] == (1 * 100 + 42, 2 * 100)  # track 1 scaled
+
+    def test_wrappers_do_not_share_track_index_late_binding(self) -> None:
+        """Python closure gotcha: without `_i=track_idx` default-arg binding,
+        all three wrappers would capture the final value of `track_idx` (2).
+        Call each wrapper after the loop completes and verify each reports its
+        own track index."""
+        captured_callbacks: list[Callable[[int, int], None]] = []
+
+        def _capture_cb_engine(
+            _file: str,
+            *,
+            progress_callback: Callable[[int, int], None] | None = None,
+            **kwargs: Any,
+        ) -> Any:
+            if progress_callback is not None:
+                captured_callbacks.append(progress_callback)
+            return _make_result([])
+
+        engine = MagicMock()
+        engine.transcribe_file.side_effect = _capture_cb_engine
+
+        outer_calls: list[tuple[int, int]] = []
+
+        with (
+            patch(
+                "server.core.multitrack.probe_channels",
+                return_value={"num_channels": 3, "channel_levels_db": [-20.0] * 3},
+            ),
+            patch(
+                "server.core.multitrack.split_channels",
+                return_value=["/tmp/a.wav", "/tmp/b.wav", "/tmp/c.wav"],
+            ),
+            patch("server.core.multitrack.Path"),
+        ):
+            transcribe_multitrack(
+                engine,
+                "/fake/three_ch.wav",
+                progress_callback=lambda c, t: outer_calls.append((c, t)),
+            )
+
+        assert len(captured_callbacks) == 3
+        # Call each wrapper AFTER the loop has completed — classic late-binding
+        # test. Each should still report its own track index.
+        for cb in captured_callbacks:
+            cb(0, 100)
+        # Expected: (0,300), (100,300), (200,300)
+        assert outer_calls == [(0, 300), (100, 300), (200, 300)]
