@@ -602,6 +602,15 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // GPU crash recovery: if the GPU process dies (e.g. due to AV interference with
+  // shader cache writes), reload the window rather than silently failing.
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'crashed' || details.reason === 'killed') {
+      console.warn(`[Main] Renderer process gone (${details.reason}) — reloading.`);
+      mainWindow?.reload();
+    }
+  });
 }
 
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
@@ -821,7 +830,6 @@ ipcMain.handle('app:removeConfigAndCache', async () => {
 });
 
 ipcMain.handle('app:getClientLogPath', () => {
-  migrateLegacyElectronDebugLogIfNeeded();
   return ensureClientLogFilePath();
 });
 
@@ -836,10 +844,38 @@ ipcMain.handle('app:readLogFiles', async (_event, tailLines: number) => {
   const clientLogPath = path.join(logDir, 'client-debug.log');
   const serverLogPath = path.join(logDir, 'server.log');
 
+  // Size-safe tail reader: reads only the last READ_TAIL_BYTES from the file
+  // using a file descriptor, avoiding loading multi-GB files into memory.
+  const READ_TAIL_BYTES = 512 * 1024; // 512 KB
+  const MAX_LOG_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB hard cap before truncation
+
   const readTail = (filePath: string, maxLines: number): string => {
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
+      const stat = fs.statSync(filePath);
+
+      // Hard cap: truncate files that have grown too large
+      if (stat.size > MAX_LOG_SIZE_BYTES) {
+        fs.writeFileSync(filePath, '', 'utf8');
+        return `[Log truncated — file exceeded ${MAX_LOG_SIZE_BYTES / 1024 / 1024}MB]\n`;
+      }
+
+      if (stat.size === 0) return '';
+
+      // Read only the tail portion
+      const readSize = Math.min(stat.size, READ_TAIL_BYTES);
+      const buffer = Buffer.alloc(readSize);
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        fs.readSync(fd, buffer, 0, readSize, stat.size - readSize);
+      } finally {
+        fs.closeSync(fd);
+      }
+
+      const content = buffer.toString('utf8');
+      // Drop any partial first line (we may have started mid-line)
+      const firstNewline = content.indexOf('\n');
+      const trimmed = firstNewline >= 0 ? content.slice(firstNewline + 1) : content;
+      const lines = trimmed.split('\n');
       return lines.slice(-maxLines).join('\n');
     } catch {
       return '';
